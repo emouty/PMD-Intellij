@@ -140,6 +140,7 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
         }
     }
 
+    @Override
     public String defaultFileExtension() {
         return "txt";
     }

@@ -10,10 +10,12 @@ import com.intellij.plugins.bodhi.pmd.core.HasPositionInFile;
  * @author jborgers
  */
 public abstract class PMDLeafNode extends BasePMDNode {
+    @Override
     public boolean canNavigate() {
         return true;
     }
 
+    @Override
     public boolean canNavigateToSource() {
         return true;
     }
@@ -33,6 +35,7 @@ public abstract class PMDLeafNode extends BasePMDNode {
         return 0;
     }
 
+    @Override
     public int getUselessSuppressionCount() {
         return 0;
     }

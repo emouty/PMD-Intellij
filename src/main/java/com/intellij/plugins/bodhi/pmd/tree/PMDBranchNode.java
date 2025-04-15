@@ -87,6 +87,7 @@ public abstract class PMDBranchNode extends BasePMDNode {
      *
      * @return the violation count
      */
+    @Override
     public synchronized int getViolationCount() {
         if (violationCount == 0) {
             calculateCounts();
@@ -99,6 +100,7 @@ public abstract class PMDBranchNode extends BasePMDNode {
      *
      * @return the violation count
      */
+    @Override
     public synchronized int getSuppressedCount() {
         return suppressedCount;
     }
@@ -108,6 +110,7 @@ public abstract class PMDBranchNode extends BasePMDNode {
      *
      * @return the violation count
      */
+    @Override
     public synchronized int getErrorCount() {
         return errorCount;
     }
@@ -117,6 +120,7 @@ public abstract class PMDBranchNode extends BasePMDNode {
      *
      * @return the useless suppression count
      */
+    @Override
     public synchronized int getUselessSuppressionCount() {
         return uselessSuppressionCount;
     }
@@ -135,10 +139,12 @@ public abstract class PMDBranchNode extends BasePMDNode {
         this.toolTip = toolTip;
     }
 
+    @Override
     public String getToolTip() {
         return toolTip;
     }
 
+    @Override
     public synchronized void render(PMDCellRenderer cellRenderer, boolean expanded) {
         cellRenderer.append(getNodeName());
         if (violationCount > 0 ) {
@@ -164,15 +170,5 @@ public abstract class PMDBranchNode extends BasePMDNode {
 
     @Override
     public void navigate(boolean b) { }  // no-op
-
-    @Override
-    public boolean canNavigate() {
-        return false;
-    }
-
-    @Override
-    public boolean canNavigateToSource() {
-        return false;
-    }
 
 }

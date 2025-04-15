@@ -15,6 +15,7 @@ public abstract class BasePMDNode extends DefaultMutableTreeNode implements PMDT
      * @deprecated Not to be used anymore, user data is now strongly typed available from a subclass of this class.
      * @return null
      */
+    @Override
     @Deprecated
     final public Object getUserObject() {
         return null;
@@ -24,6 +25,7 @@ public abstract class BasePMDNode extends DefaultMutableTreeNode implements PMDT
      * @deprecated Not to be used anymore, user data is now strongly typed available from a subclass of this class.
      * Does nothing.
      */
+    @Override
     @Deprecated
     final public void setUserObject(Object o) {
         // nop-op;

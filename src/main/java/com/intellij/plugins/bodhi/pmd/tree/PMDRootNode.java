@@ -72,6 +72,7 @@ public class PMDRootNode extends PMDBranchNode {
 
     public void setRuleSetErrorMsg(String msg) { ruleSetErrorMsg = msg; }
 
+    @Override
     public void render(PMDCellRenderer cellRenderer, boolean expanded) {
         cellRenderer.append(getNodeName());
         if (fileCount == 0) {

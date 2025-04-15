@@ -30,7 +30,7 @@ import java.util.List;
  * Display PMD violations in the editor and in the problem view
  */
 public class PMDExternalAnnotator extends ExternalAnnotator<FileInfo, PMDAnnotations> {
-    private static final Log log = LogFactory.getLog(PMDExternalAnnotator.class);
+    private static final Log LOG = LogFactory.getLog(PMDExternalAnnotator.class);
 
     @Override
     public FileInfo collectInformation(@NotNull PsiFile file, @NotNull Editor editor, boolean hasErrors) {
@@ -82,7 +82,7 @@ public class PMDExternalAnnotator extends ExternalAnnotator<FileInfo, PMDAnnotat
                         .create();
             } catch(IllegalArgumentException e) {
                 // Catching "Invalid range specified" from TextRange.create thrown when file has been updated while analyzing
-                log.warn("Error while annotating file with PMD warnings: " + e.getMessage());
+                LOG.warn("Error while annotating file with PMD warnings: " + e.getMessage());
             }
         }
     }

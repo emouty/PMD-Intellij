@@ -4,6 +4,7 @@ package com.intellij.plugins.bodhi.pmd.core;
 import net.sourceforge.pmd.lang.rule.Rule;
 import net.sourceforge.pmd.lang.rule.RulePriority;
 import net.sourceforge.pmd.reporting.RuleViolation;
+import org.apache.commons.lang3.StringUtils;
 
 import static net.sourceforge.pmd.reporting.RuleViolation.*;
 
@@ -44,7 +45,7 @@ public class PMDViolation implements HasPositionInFile, HasRule, HasMessage {
             methodName = "." + methodName + "()";
         }
         String packageName = violation.getAdditionalInfo().get(PACKAGE_NAME);
-        this.packageMsg = (packageName != null && !packageName.trim().isEmpty()) ? (" in " + packageName) : "";
+        this.packageMsg = !StringUtils.isBlank(packageName) ? (" in " + packageName) : "";
         this.classAndMethodMsg = className + methodName;
     }
 
@@ -71,6 +72,7 @@ public class PMDViolation implements HasPositionInFile, HasRule, HasMessage {
         return ruleViolation.getEndColumn();
     }
 
+    @Override
     public Rule getRule() {
         return ruleViolation.getRule();
     }

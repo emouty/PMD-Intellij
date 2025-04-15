@@ -21,7 +21,7 @@ kotlin {
 // Configure project's dependencies
 repositories {
     mavenCentral()
-    intellijPlatform() {
+    intellijPlatform {
         defaultRepositories()
     }
 }

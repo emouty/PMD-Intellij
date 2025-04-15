@@ -142,10 +142,12 @@ public class PMDUtil {
      */
     public static javax.swing.filechooser.FileFilter createFileExtensionFilter(final String extension, final String description) {
         return new javax.swing.filechooser.FileFilter() {
+            @Override
             public boolean accept(File pathname) {
                 return isMatchingExtension(pathname, extension);
             }
 
+            @Override
             public String getDescription() {
                 return description;
             }

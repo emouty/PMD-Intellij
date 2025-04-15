@@ -41,7 +41,7 @@ public class PMDSuppressedViolation implements HasPositionInFile {
      *         annotation.
      */
     public boolean suppressedByAnnotation() {
-        return suppressedViolation.getSuppressor().getId().equals("@SuppressWarnings");
+        return "@SuppressWarnings".equals(suppressedViolation.getSuppressor().getId());
     }
 
     /**

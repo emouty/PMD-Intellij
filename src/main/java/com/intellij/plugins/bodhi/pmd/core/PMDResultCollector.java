@@ -154,7 +154,7 @@ public class PMDResultCollector {
         if (threads == null || threads.isEmpty()) {
             pmdConfig.setThreads(PMDUtil.AVAILABLE_PROCESSORS);
         }
-        else if (threads.equals("1")) {
+        else if ("1".equals(threads)) {
             pmdConfig.setThreads(0); // 0 is a special value invoking in single thread mood
         } else {
             pmdConfig.setThreads(Integer.parseInt(threads));

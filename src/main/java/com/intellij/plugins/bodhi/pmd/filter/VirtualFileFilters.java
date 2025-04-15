@@ -53,6 +53,7 @@ public class VirtualFileFilters
         }
 
 
+        @Override
         public boolean accept(@NotNull VirtualFile file)
         {
             for (VirtualFileFilter filter : filters)
@@ -76,6 +77,7 @@ public class VirtualFileFilters
         }
 
 
+        @Override
         public boolean accept(@NotNull VirtualFile file)
         {
             for (VirtualFileFilter filter : filters)
@@ -91,6 +93,7 @@ public class VirtualFileFilters
 
     static class DirectoryFilter implements VirtualFileFilter
     {
+        @Override
         public boolean accept(VirtualFile file)
         {
             return file.isDirectory();
@@ -106,6 +109,7 @@ public class VirtualFileFilters
             this.extension = extension;
         }
 
+        @Override
         public boolean accept(VirtualFile file)
         {
             return !file.isDirectory() && file.getPresentableUrl().endsWith("." + extension);
@@ -121,6 +125,7 @@ public class VirtualFileFilters
             this.project = project;
         }
 
+        @Override
         public boolean accept(@NotNull VirtualFile file)
         {
             return ProjectRootManager.getInstance(project).getFileIndex().isInSource(file);
@@ -136,6 +141,7 @@ public class VirtualFileFilters
             this.project = project;
         }
 
+        @Override
         public boolean accept(@NotNull VirtualFile file)
         {
             return ProjectRootManager.getInstance(project).getFileIndex().isInTestSourceContent(file);
@@ -151,6 +157,7 @@ public class VirtualFileFilters
             this.filter = filter;
         }
 
+        @Override
         public boolean accept(@NotNull VirtualFile file)
         {
             return !filter.accept(file);

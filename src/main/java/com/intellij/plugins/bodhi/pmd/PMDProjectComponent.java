@@ -137,6 +137,7 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
                     actionText += " (" + extFileName + ")";
                 }
                 AnAction action = new AnAction(actionText) {
+                    @Override
                     public void actionPerformed(@NotNull AnActionEvent e) {
                         PMDInvoker.getInstance().runPMD(e, ruleSetPath);
                         setLastRunActionAndRules(e, ruleSetPath, true);
@@ -149,6 +150,7 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
             actionGroup.addAll(newActionList);
     }
 
+    @Override
     public void dispose() {
         numProjectsOpen.decrementAndGet();
     }
@@ -266,6 +268,7 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
      * Return fields in a PersistentData object
      * @return the PersistentData object
      */
+    @Override
     @NotNull
     public PersistentData getState() {
         final PersistentData persistentData = new PersistentData();
@@ -288,12 +291,13 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
      * load state into fields
      * @param state the PersistentData object
      */
+    @Override
     public void loadState(PersistentData state) {
         customRuleSetPaths.clear();
         optionToValue.clear();
         customRuleSetPaths.addAll(state.getCustomRuleSets());
         for (String key : state.getOptionKeyToValue().keySet()) {
-            if (key.equals("Encoding")) { // replace unused 'Encoding' by 'Statistics URL'
+            if ("Encoding".equals(key)) { // replace unused 'Encoding' by 'Statistics URL'
                 optionToValue.put(ConfigOption.STATISTICS_URL, "");
             }
             else {

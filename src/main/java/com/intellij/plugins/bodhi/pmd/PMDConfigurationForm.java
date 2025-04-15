@@ -17,6 +17,7 @@ import com.intellij.util.PlatformIcons;
 import net.sourceforge.pmd.lang.Language;
 import net.sourceforge.pmd.lang.LanguageRegistry;
 import net.sourceforge.pmd.lang.LanguageVersion;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -212,7 +213,7 @@ public class PMDConfigurationForm {
                     listModel.set(selectedIndex, rulesPath.trim()); // trigger menu update
                     return;
                 }
-                if (defaultValue != null && !defaultValue.trim().isEmpty() && selectedIndex >= 0) {
+                if (!StringUtils.isBlank(defaultValue) && selectedIndex >= 0) {
                     listModel.set(selectedIndex, rulesPath);
                     return;
                 }
@@ -238,6 +239,7 @@ public class PMDConfigurationForm {
             registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, KeyEvent.ALT_DOWN_MASK)), rootPanel);
         }
 
+        @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
             String defaultValue = "";
             modifyRuleSet(defaultValue, e);
@@ -253,11 +255,13 @@ public class PMDConfigurationForm {
             registerCustomShortcutSet(CommonShortcuts.ALT_ENTER, rootPanel);
         }
 
+        @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
             String defaultValue = ruleSetPathJList.getSelectedValue();
             modifyRuleSet(defaultValue, e);
         }
 
+        @Override
         public void update(@NotNull AnActionEvent e) {
             super.update(e);
             e.getPresentation().setEnabled(!ruleSetPathJList.getSelectionModel().isSelectionEmpty());
@@ -274,6 +278,7 @@ public class PMDConfigurationForm {
             registerCustomShortcutSet(CommonShortcuts.getDelete(), rootPanel);
         }
 
+        @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
             int index = ruleSetPathJList.getSelectedIndex();
             if (index != -1) {
@@ -287,6 +292,7 @@ public class PMDConfigurationForm {
             ruleSetPathJList.repaint();
         }
 
+        @Override
         public void update(@NotNull AnActionEvent e) {
             super.update(e);
             e.getPresentation().setEnabled(ruleSetPathJList.getSelectedIndex() != -1);
@@ -298,10 +304,12 @@ public class PMDConfigurationForm {
             super(data, columnNames);
         }
 
+        @Override
         public boolean isCellEditable(int row, int column) {
             return column == 1;
         }
 
+        @Override
         public void setValueAt(Object aValue, int row, int column) {
             Object orig = getValueAt(row, column);
             super.setValueAt(aValue, row, column);
@@ -358,13 +366,13 @@ public class PMDConfigurationForm {
                 if (PMDUtil.isValidUrl(urlInput)) {
                     String content = "{\"test connection\"}\n";
                     String exportMsg = PMDJsonExportingRenderer.tryJsonExport(content, urlInput);
-                    if (!exportMsg.isEmpty()) {
+                    if (exportMsg.isEmpty()) {
+                        isModified = true;
+                        optionsTable.setToolTipText(STAT_URL_MSG_SUCCESS);
+                    } else {
                         optionsTable.setToolTipText("Previous input - Failure for '" + urlInput + "': " + exportMsg);
                         super.setValueAt(orig, row, column);
                         isModified = origIsMod;
-                    } else {
-                        isModified = true;
-                        optionsTable.setToolTipText(STAT_URL_MSG_SUCCESS);
                     }
                 } else {
                     optionsTable.setToolTipText("Previous input - Invalid URL: '" + urlInput + "'");
@@ -411,6 +419,7 @@ public class PMDConfigurationForm {
             this.list = new ArrayList<>(set);
         }
 
+        @Override
         public synchronized int getSize() {
             return list.size();
         }
@@ -424,6 +433,7 @@ public class PMDConfigurationForm {
             }
         }
 
+        @Override
         public synchronized String getElementAt(int index) {
             return list.get(index);
         }
@@ -526,6 +536,7 @@ public class PMDConfigurationForm {
 
     private class CheckBoxChangeListener implements ChangeListener
     {
+        @Override
         public void stateChanged(ChangeEvent e)
         {
             isModified = true;

@@ -31,6 +31,7 @@ public class PMDSuppressedNode extends PMDLeafNode implements HasMessage, HasRul
      *
      * @param requestFocus Focus the editor.
      */
+    @Override
     public void navigate(boolean requestFocus) {
         highlightFindingInEditor(pmdSuppressedViolation);
     }
@@ -59,11 +60,13 @@ public class PMDSuppressedNode extends PMDLeafNode implements HasMessage, HasRul
     }
 
     private boolean containsNoReasonDescription(String userMessage) {
-        return userMessage == null || userMessage.length() < 3
-                || (userMessage.contains("NOSONAR") && userMessage.length() < 13
-                || userMessage.contains("TODO"));
+        return userMessage == null
+                || userMessage.length() < 3
+                || userMessage.contains("NOSONAR") && userMessage.length() < 13
+                || userMessage.contains("TODO");
     }
 
+    @Override
     public String getMessage() {
         return "A violation is actually suppressed by " +
                 (pmdSuppressedViolation.suppressedByNOPMD() ? "//NOPMD. " : "@SuppressWarnings. ")

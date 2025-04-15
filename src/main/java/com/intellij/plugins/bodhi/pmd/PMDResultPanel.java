@@ -84,6 +84,7 @@ public class PMDResultPanel extends JPanel {
 
         // Create the tree which can show tooltips as well.
         resultTree = new JTree() {
+            @Override
             public String getToolTipText(MouseEvent evt) {
                 if (getRowForLocation(evt.getX(), evt.getY()) == -1)
                     return null;
@@ -130,9 +131,10 @@ public class PMDResultPanel extends JPanel {
 
         //Add right-click menu to the tree
         popupMenu = new PMDPopupMenu(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 final List<PMDViolation> violations = popupMenu.getViolations();
-                if (e.getActionCommand().equals(PMDPopupMenu.SUPPRESS)) {
+                if (PMDPopupMenu.SUPPRESS.equals(e.getActionCommand())) {
                     // suppress all selected violations, max 1 per file+line
                     Map<String, PMDViolation> uniqueViolationsMap = new HashMap<>();
                     for (PMDViolation violation : violations) {
@@ -145,7 +147,7 @@ public class PMDResultPanel extends JPanel {
                             executeWrite(editor, violation);
                         }
                     }
-                } else if (e.getActionCommand().equals(PMDPopupMenu.DETAILS)) {
+                } else if (PMDPopupMenu.DETAILS.equals(e.getActionCommand())) {
                     // show rule details documentation in browser
                     String url = popupMenu.getDetailsUrl();
                     if (!url.isEmpty()) {
@@ -158,7 +160,7 @@ public class PMDResultPanel extends JPanel {
         //Add mouse listener to support double click and popup actions.
         resultTree.addMouseListener(new MouseAdapter() {
             //Get the current tree node where the mouse event happened
-            private DefaultMutableTreeNode[] getNodeFromEvent(MouseEvent e) {
+            private DefaultMutableTreeNode[] getNodeFromEvent() {
                 TreePath[] selectionPaths = resultTree.getSelectionPaths();
                 if (selectionPaths != null) {
                     DefaultMutableTreeNode[] result = new DefaultMutableTreeNode[selectionPaths.length];
@@ -170,8 +172,9 @@ public class PMDResultPanel extends JPanel {
                 return null;
             }
 
+            @Override
             public void mousePressed(MouseEvent e) {
-                DefaultMutableTreeNode[] treeNodes = getNodeFromEvent(e);
+                DefaultMutableTreeNode[] treeNodes = getNodeFromEvent();
                 if (treeNodes != null) {
                     DefaultMutableTreeNode node = treeNodes[0];
                     setRuleDetailsOnTextArea(node);
@@ -187,8 +190,9 @@ public class PMDResultPanel extends JPanel {
                 }
             }
 
+            @Override
             public void mouseReleased(MouseEvent e) {
-                DefaultMutableTreeNode[] treeNodes = getNodeFromEvent(e);
+                DefaultMutableTreeNode[] treeNodes = getNodeFromEvent();
                 showPopup(treeNodes, e);
             }
         });
@@ -266,12 +270,9 @@ public class PMDResultPanel extends JPanel {
      */
     private void executeWrite(final Editor editor, final PMDViolation result) {
         //If readonly show the read-only dialog
-        if (!editor.getDocument().isWritable()) {
-            if (!FileDocumentManager.fileForDocumentCheckedOutSuccessfully(editor.getDocument(), projectComponent.getCurrentProject()))
-                return;
-        }
-
         //Not read only, to execute a command to write to the editor
+        if (editor.getDocument().isWritable() || FileDocumentManager.fileForDocumentCheckedOutSuccessfully(editor.getDocument(), projectComponent.getCurrentProject())) {
+
         CommandProcessor.getInstance().executeCommand(
                 projectComponent.getCurrentProject(),
                 () -> {
@@ -283,7 +284,7 @@ public class PMDResultPanel extends JPanel {
                     });
                 },
                 "SuppressViolation",
-                null);
+                null);}
     }
 
     /**
@@ -305,18 +306,22 @@ public class PMDResultPanel extends JPanel {
 
         // TreeExpander for expand/collapse all.
         TreeExpander treeExpander = new TreeExpander() {
+            @Override
             public void expandAll() {
                 TreeUtil.expandAll(resultTree);
             }
 
+            @Override
             public boolean canExpand() {
                 return true;
             }
 
+            @Override
             public void collapseAll() {
                 TreeUtil.collapseAll(resultTree, 1);
             }
 
+            @Override
             public boolean canCollapse() {
                 return true;
             }
@@ -327,6 +332,7 @@ public class PMDResultPanel extends JPanel {
 
         //OccurenceNavigator for next/prev actions
         OccurenceNavigator occurenceNavigator = new OccurenceNavigatorSupport(resultTree) {
+            @Override
             @Nullable
             protected Navigatable createDescriptorForNode(DefaultMutableTreeNode node) {
                 if (node.getChildCount() > 0) return null;
@@ -354,10 +360,12 @@ public class PMDResultPanel extends JPanel {
                 return info;
             }
 
+            @Override
             public @NotNull String getNextOccurenceActionName() {
                 return UsageViewBundle.message("action.next.occurrence");
             }
 
+            @Override
             public @NotNull String getPreviousOccurenceActionName() {
                 return UsageViewBundle.message("action.previous.occurrence");
             }
@@ -367,25 +375,27 @@ public class PMDResultPanel extends JPanel {
         actionGroup.add(CommonActionsManager.getInstance().createPrevOccurenceAction(occurenceNavigator));
         actionGroup.add(CommonActionsManager.getInstance().installAutoscrollToSourceHandler(projectComponent.getCurrentProject(),
                 resultTree, new AutoScrollToSourceOptionProvider() {
+            @Override
             public boolean isAutoScrollMode() {
                 return scrolling;
             }
 
+            @Override
             public void setAutoScrollMode(boolean state) {
                 scrolling = state;
             }
         }));
         actionGroup.add(CommonActionsManager.getInstance().createExportToTextFileAction(new ExporterToTextFile() {
+            @Override
             public JComponent getSettingsEditor() {
                 return null;
             }
 
+            @Override
             public void addSettingsChangedListener(ChangeListener listener) {
             }
 
-            public void removeSettingsChangedListener(ChangeListener listener) {
-            }
-
+            @Override
             public @NotNull String getReportText() {
                 Report r = PMDResultCollector.getReport();
                 HTMLRenderer renderer = new HTMLRenderer();
@@ -399,13 +409,12 @@ public class PMDResultPanel extends JPanel {
                 return "";
             }
 
+            @Override
             @NotNull public String getDefaultFilePath() {
                 return "report.html";
             }
 
-            public void exportedTo(@NotNull String filePath) {
-            }
-
+            @Override
             public boolean canExport() {
                 return true;
             }
@@ -534,6 +543,7 @@ public class PMDResultPanel extends JPanel {
             registerCustomShortcutSet(CommonShortcuts.getRerun(), PMDResultPanel.this);
         }
 
+        @Override
         public void actionPerformed(AnActionEvent e) {
             Project project = e.getData(PlatformDataKeys.PROJECT);
             //Run the last run rule sets
@@ -558,6 +568,7 @@ public class PMDResultPanel extends JPanel {
             super(CommonBundle.message(ACTION_CLOSE), null, AllIcons.Actions.Cancel);
         }
 
+        @Override
         public void actionPerformed(AnActionEvent e) {
             Project project = e.getData(PlatformDataKeys.PROJECT);
             if (project != null) {

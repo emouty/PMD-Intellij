@@ -17,16 +17,19 @@ public class PMDConfigurable implements Configurable {
         this.component = project.getService(PMDProjectComponent.class);
     }
 
+    @Override
     public String getDisplayName() {
         return "PMD";
     }
 
+    @Override
     @Nullable
     @NonNls
     public String getHelpTopic() {
         return null;
     }
 
+    @Override
     public JComponent createComponent() {
         if (form == null) {
             form = new PMDConfigurationForm(project);
@@ -34,10 +37,12 @@ public class PMDConfigurable implements Configurable {
         return form.getRootPanel();
     }
 
+    @Override
     public boolean isModified() {
         return form != null && form.isModified(component);
     }
 
+    @Override
     public void apply()  {
         if (form != null) {
             form.getDataFromUi(component);
@@ -45,12 +50,14 @@ public class PMDConfigurable implements Configurable {
         component.updateCustomRulesMenu();
     }
 
+    @Override
     public void reset() {
         if (form != null) {
             form.setDataOnUI(component);
         }
     }
 
+    @Override
     public void disposeUIResources() {
         form = null;
     }

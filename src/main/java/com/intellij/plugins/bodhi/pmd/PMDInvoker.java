@@ -40,7 +40,7 @@ import static com.intellij.plugins.bodhi.pmd.filter.VirtualFileFilters.*;
  * @version 1.0
  */
 public class PMDInvoker {
-    private static final Log log = LogFactory.getLog(PMDInvoker.class);
+    private static final Log LOG = LogFactory.getLog(PMDInvoker.class);
 
     /**
      * The delimiter used for delimiting multiple rules.
@@ -91,10 +91,10 @@ public class PMDInvoker {
         PMDRootNode rootNode = resultPanel.getRootNode();
 
         List<File> files = new LinkedList<>();
-        if (actionEvent.getPlace().equals(ActionPlaces.PROJECT_VIEW_POPUP)
-                || actionEvent.getPlace().equals(ActionPlaces.SCOPE_VIEW_POPUP)
-                || actionEvent.getPlace().equals(ActionPlaces.CHANGES_VIEW_POPUP)
-                || actionEvent.getPlace().equals(ActionPlaces.MAIN_MENU)
+        if (ActionPlaces.PROJECT_VIEW_POPUP.equals(actionEvent.getPlace())
+                || ActionPlaces.SCOPE_VIEW_POPUP.equals(actionEvent.getPlace())
+                || ActionPlaces.CHANGES_VIEW_POPUP.equals(actionEvent.getPlace())
+                || ActionPlaces.MAIN_MENU.equals(actionEvent.getPlace())
         ) {
 
             //If selected by right-click on file/folder (s)
@@ -200,7 +200,7 @@ public class PMDInvoker {
                     rootNode.calculateCounts();
                 } catch (Throwable t) {
                     rootNode.setRuleSetErrorMsg(t.getMessage());
-                    log.error("Error running PMD", t);
+                    LOG.error("Error running PMD", t);
                 } finally {
                     rootNode.setRunning(false);
                     resultPanel.reloadResultTree();

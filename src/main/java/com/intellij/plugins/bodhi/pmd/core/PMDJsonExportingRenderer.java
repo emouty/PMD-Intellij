@@ -260,7 +260,7 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
                 msg = e.getMessage();
             }
         }
-        if (msg.equals("Connection refused (Connection refused)")) {
+        if ("Connection refused (Connection refused)".equals(msg)) {
             msg = "Connection refused";
         }
         return msg;

@@ -35,6 +35,7 @@ public class PreDefinedMenuGroup extends DefaultActionGroup {
      */
     public PreDefinedMenuGroup() {
         AnAction action = new AnAction("All") {
+            @Override
             public void actionPerformed(@NotNull AnActionEvent e) {
                 PMDInvoker.getInstance().runPMD(e, allRules);
                 getComponent().setLastRunActionAndRules(e, allRules, false);
@@ -61,6 +62,7 @@ public class PreDefinedMenuGroup extends DefaultActionGroup {
                 }
 
                 AnAction ruleAction = new AnAction(ruleName) {
+                    @Override
                     public void actionPerformed(@NotNull AnActionEvent e) {
                         PMDInvoker.getInstance().runPMD(e, ruleFileName);
                         getComponent().setLastRunActionAndRules(e, ruleFileName, false);

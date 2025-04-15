@@ -37,14 +37,17 @@ public class PMDViolationNode extends PMDLeafNode implements HasRule, HasMessage
      *
      * @param requestFocus Focus the editor.
      */
+    @Override
     public void navigate(boolean requestFocus) {
         highlightFindingInEditor(pmdViolation);
     }
 
+    @Override
     public String getToolTip() {
         return pmdViolation.getDescription();
     }
 
+    @Override
     public void render(PMDCellRenderer cellRenderer, boolean expanded) {
         cellRenderer.setIconForRulePriority(pmdViolation.getRulePriority());
         //Show violation position greyed, like idea shows.

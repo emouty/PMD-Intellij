@@ -2,6 +2,7 @@ package com.intellij.plugins.bodhi.pmd.tree;
 
 import com.intellij.plugins.bodhi.pmd.core.HasMessage;
 import com.intellij.plugins.bodhi.pmd.core.PMDProcessingError;
+
 import static com.intellij.ui.SimpleTextAttributes.GRAYED_ATTRIBUTES;
 
 /**
@@ -46,6 +47,7 @@ public class PMDErrorNode extends PMDLeafNode implements HasMessage {
      *
      * @param requestFocus Focus the editor.
      */
+    @Override
     public void navigate(boolean requestFocus) {
         highlightFindingInEditor(pmdProcessingError);
     }

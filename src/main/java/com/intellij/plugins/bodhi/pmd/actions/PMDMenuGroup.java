@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public class PMDMenuGroup extends DefaultActionGroup {
 
+    @Override
     public void update(@NotNull AnActionEvent e) {
         super.update(e);
         Presentation presentation = e.getPresentation();
@@ -27,7 +28,7 @@ public class PMDMenuGroup extends DefaultActionGroup {
         } else {
             presentation.setVisible(true);
         }
-        if (e.getPlace().equals(ActionPlaces.MAIN_MENU)) {
+        if (ActionPlaces.MAIN_MENU.equals(e.getPlace())) {
             //Enabled only if some files are selected.
             VirtualFile[] selectedFiles = FileEditorManager.getInstance(project).getSelectedFiles();
             presentation.setEnabled(selectedFiles.length != 0);

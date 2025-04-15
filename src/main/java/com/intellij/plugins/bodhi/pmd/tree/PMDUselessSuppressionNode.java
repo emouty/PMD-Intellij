@@ -29,6 +29,7 @@ public class PMDUselessSuppressionNode extends PMDLeafNode implements HasMessage
      *
      * @param requestFocus Focus the editor.
      */
+    @Override
     public void navigate(boolean requestFocus) {
         highlightFindingInEditor(uselessSuppression);
     }
