@@ -4,6 +4,7 @@ import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.PluginId;
+import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,9 +38,11 @@ final class PmdClassLoaderContainer {
 
     private final Project project;
     private final ChildFirstURLClassLoader classLoader;
+    private final String loadedVersion;
 
-    PmdClassLoaderContainer(@NotNull Project project, @NotNull List<Path> pmdJars) {
+    PmdClassLoaderContainer(@NotNull Project project, @NotNull List<Path> pmdJars, @Nullable String loadedVersion) {
         this.project = project;
+        this.loadedVersion = loadedVersion;
         Path pmdbridgeJar = locatePmdbridgeJar();
         List<URL> urls = new ArrayList<>();
         if (pmdbridgeJar != null) {
@@ -66,10 +69,23 @@ final class PmdClassLoaderContainer {
      */
     @NotNull
     static PmdClassLoaderContainer forVersion(@NotNull Project project, @Nullable String version) {
+        return forVersion(project, version, null);
+    }
+
+    /**
+     * Variant that accepts a {@link ProgressIndicator} so a Maven Central download (when the
+     * requested version is missing from {@code ~/.m2}) can report progress to the user.
+     */
+    @NotNull
+    static PmdClassLoaderContainer forVersion(@NotNull Project project,
+                                              @Nullable String version,
+                                              @Nullable ProgressIndicator indicator) {
         List<Path> jars = new ArrayList<>();
+        String loadedVersion = null;
         if (version != null && !version.isEmpty()) {
-            Optional<List<Path>> resolved = PmdMavenResolver.resolve(version);
+            Optional<List<Path>> resolved = PmdMavenResolver.resolveOrDownload(version, indicator);
             if (resolved.isPresent()) {
+                loadedVersion = version;
                 jars.addAll(resolved.get());
                 // Add bundled JARs as fallback for transitive deps, skipping bundled
                 // pmd-* artifacts so they can't shadow the user's chosen version.
@@ -82,13 +98,23 @@ final class PmdClassLoaderContainer {
                     }
                 }
             } else {
-                LOG.warn("PMD " + version + " not found in local Maven cache; falling back to bundled default");
+                LOG.warn("PMD " + version + " could not be resolved; falling back to bundled default");
                 jars.addAll(bundledDefaultPmdJars());
             }
         } else {
             jars.addAll(bundledDefaultPmdJars());
         }
-        return new PmdClassLoaderContainer(project, jars);
+        return new PmdClassLoaderContainer(project, jars, loadedVersion);
+    }
+
+    /**
+     * The PMD version whose JARs this container actually loaded: the requested version, or
+     * {@code null} when the bundled default was used; either because none was requested or
+     * because resolution fell back to it.
+     */
+    @Nullable
+    String loadedVersion() {
+        return loadedVersion;
     }
 
     @NotNull
@@ -111,7 +137,7 @@ final class PmdClassLoaderContainer {
     /**
      * Closes the underlying {@link ChildFirstURLClassLoader}, releasing its JAR handles.
      * Classes already loaded by an in-flight analysis keep working, but further lazy
-     * loading from these JARs will fail — only call after this container has been
+     * loading from these JARs will fail; only call after this container has been
      * swapped out.
      */
     void close() {
@@ -120,6 +146,21 @@ final class PmdClassLoaderContainer {
         } catch (IOException e) {
             LOG.warn("Failed to close PMD classloader", e);
         }
+    }
+
+    /**
+     * Bundled PMD version parsed from the {@code pmd-core-<version>.jar} filename in
+     * {@code <plugin>/pmd/lib/default}, or {@code null} when it cannot be determined.
+     */
+    @Nullable
+    static String bundledPmdVersion() {
+        for (Path jar : bundledDefaultPmdJars()) {
+            String name = jar.getFileName().toString();
+            if (name.startsWith("pmd-core-") && name.endsWith(".jar")) {
+                return name.substring("pmd-core-".length(), name.length() - ".jar".length());
+            }
+        }
+        return null;
     }
 
     // --- helpers --------------------------------------------------------

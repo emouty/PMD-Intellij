@@ -2,6 +2,7 @@ package com.intellij.plugins.bodhi.pmd;
 
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
@@ -14,7 +15,9 @@ import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.plugins.bodhi.pmd.actions.AnEDTAction;
 import com.intellij.plugins.bodhi.pmd.core.PMDResultCollector;
+import com.intellij.plugins.bodhi.pmd.pmd.PmdMavenResolver;
 import com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.PlatformIcons;
 import org.jetbrains.annotations.NotNull;
 
@@ -59,18 +62,38 @@ public class PMDConfigurationForm {
 
     private static final List<String> columnNames = List.of("Option", "Value");
     private static final String STAT_URL_MSG_SUCCESS = "Connection success; will use Statistics URL to export anonymous usage statistics";
+    private static final Color STATUS_OK_GREEN = new Color(0x2E, 0x7D, 0x32);
+    private static final Color STATUS_ERROR_RED = new Color(0xC6, 0x28, 0x28);
+
+    // ---- Dedicated "PMD version" section (built programmatically; not in the .form XML) ----
+    /** Wrapper panel returned by {@link #getRootPanel()} containing the version section + original form. */
+    private JPanel wrappedRoot;
+    /** Editable combo: items are raw version strings, {@code ""} = bundled default (always item 0). */
+    private final ComboBox<String> pmdVersionCombo = new ComboBox<>();
+    private final JLabel pmdVersionStatusLabel = new JLabel(" ");
+    /** Guards the editor DocumentListener while the model is swapped by async population. */
+    private boolean populatingVersionCombo;
+    private volatile String bundledVersion;
+    private volatile Set<String> locallyCachedVersions = Set.of();
+    /** Last version string successfully passed through {@link com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService#validateAndActivate}. */
+    private String lastValidatedVersion = null;
+
+    private static final List<ConfigOption> TABLE_OPTIONS;
+    static {
+        java.util.List<ConfigOption> opts = new java.util.ArrayList<>();
+        for (ConfigOption o : ConfigOption.values()) {
+            if (o != ConfigOption.PMD_VERSION) {
+                opts.add(o);
+            }
+        }
+        TABLE_OPTIONS = java.util.Collections.unmodifiableList(opts);
+    }
 
     public PMDConfigurationForm(final Project project) {
         this.project = project;
 
         optionsTable.putClientProperty("terminateEditOnFocusLost", true); // fixes issue #45
         optionsTable.setRowHeight(optionsTable.getRowHeight() + 5); // increase space around text
-        // Reserve enough viewport height to show every ConfigOption row without scrolling
-        // (with one extra row's headroom). Set on the table itself so JScrollPane honors it.
-        int rows = ConfigOption.size();
-        int rowHeight = optionsTable.getRowHeight();
-        optionsTable.setPreferredScrollableViewportSize(
-                new Dimension(450, (rows + 1) * rowHeight));
         ruleSetPathJList.setModel(new RuleSetListModel(new ArrayList<>()));
         inEditorAnnotationRuleSets.setModel(new RuleSetListModel(new ArrayList<>()));
         inEditorAnnotationRuleSets.getSelectionModel().addListSelectionListener(new SelectionChangeListener());
@@ -98,7 +121,7 @@ public class PMDConfigurationForm {
     private void tryInitActionManager(int attemptCount) {
         ApplicationManager.getApplication().invokeLater(() -> {
             if (disposed) {
-                return; // form disposed while init was queued — don't repopulate the group
+                return; // form disposed while init was queued; don't repopulate the group
             }
             try {
                 initializeActionManager();
@@ -147,7 +170,96 @@ public class PMDConfigurationForm {
      * @return the root panel
      */
     public JPanel getRootPanel() {
-        return mainPanel;
+        if (wrappedRoot == null) {
+            wrappedRoot = new JPanel(new BorderLayout());
+            wrappedRoot.add(buildPmdVersionSection(), BorderLayout.NORTH);
+            wrappedRoot.add(mainPanel, BorderLayout.CENTER);
+        }
+        return wrappedRoot;
+    }
+
+    private JPanel buildPmdVersionSection() {
+        JPanel section = new JPanel(new BorderLayout(6, 4));
+        section.setBorder(BorderFactory.createTitledBorder("PMD version"));
+
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        row.add(new JLabel("Version:"));
+        pmdVersionCombo.setEditable(true);
+        pmdVersionCombo.setModel(new DefaultComboBoxModel<>(new String[]{""}));
+        pmdVersionCombo.setPrototypeDisplayValue("7.99.99 [downloaded]");
+        pmdVersionCombo.setToolTipText(
+                "Empty = bundled default. Otherwise the requested version is loaded from ~/.m2 or downloaded from Maven Central.");
+        pmdVersionCombo.setRenderer(SimpleListCellRenderer.create("", this::renderVersionItem));
+        row.add(pmdVersionCombo);
+        row.add(pmdVersionStatusLabel);
+        section.add(row, BorderLayout.NORTH);
+
+        versionEditor().getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { onChange(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { onChange(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { onChange(); }
+            private void onChange() {
+                if (populatingVersionCombo) {
+                    return;
+                }
+                isModified = true;
+                if (needsVersionValidation()) {
+                    pmdVersionStatusLabel.setForeground(UIManager.getColor("Label.foreground"));
+                    pmdVersionStatusLabel.setText("Will be validated on Apply.");
+                }
+            }
+        });
+
+        populateVersionComboAsync();
+
+        return section;
+    }
+
+    /** Popup label for a version item; the editor itself always shows the raw string. */
+    private String renderVersionItem(String value) {
+        if (value == null || value.isEmpty()) {
+            return (bundledVersion != null ? bundledVersion + " " : "") + "[bundled]";
+        }
+        return value + (locallyCachedVersions.contains(value) ? " [downloaded]" : " ↓");
+    }
+
+    /**
+     * Fetches the available PMD versions off the EDT and fills the combo popup. On fetch
+     * failure the combo simply keeps the bundled entry plus whatever the user types.
+     */
+    private void populateVersionComboAsync() {
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            String bundled = PmdProjectService.getBundledPmdVersion();
+            List<String> versions = PmdMavenResolver.fetchAvailableVersions(null);
+            Set<String> downloaded = new HashSet<>();
+            for (String v : versions) {
+                if (PmdMavenResolver.resolve(v).isPresent()) {
+                    downloaded.add(v);
+                }
+            }
+            // ModalityState.any(): the settings dialog is modal; the default modality
+            // would defer this runnable until the dialog closes.
+            ApplicationManager.getApplication().invokeLater(() -> {
+                bundledVersion = bundled;
+                locallyCachedVersions = downloaded;
+                String current = getPmdVersionFromUi();
+                populatingVersionCombo = true;
+                try {
+                    DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
+                    model.addElement("");
+                    versions.forEach(model::addElement);
+                    pmdVersionCombo.setModel(model);
+                    pmdVersionCombo.setSelectedItem(current);
+                } finally {
+                    populatingVersionCombo = false;
+                }
+            }, ModalityState.any());
+        });
+    }
+
+    /** The combo's editor text field: the single source of truth for the typed/selected version. */
+    private JTextField versionEditor() {
+        return (JTextField) pmdVersionCombo.getEditor().getEditorComponent();
     }
 
     /**
@@ -158,10 +270,10 @@ public class PMDConfigurationForm {
         List<String> customRuleSetPaths = dataProjComp.getCustomRuleSetPaths();
         ruleSetPathJList.setModel(new RuleSetListModel(customRuleSetPaths));
         if (dataProjComp.getOptionToValue().isEmpty()) {
-            final int numOptions = ConfigOption.size();
+            final int numOptions = TABLE_OPTIONS.size();
             String[][] optionDescsDefaultValues = new String[numOptions][2];
             for (int i = 0; i < numOptions; i++) {
-                ConfigOption option = ConfigOption.values()[i];
+                ConfigOption option = TABLE_OPTIONS.get(i);
                 optionDescsDefaultValues[i][0] = option.getDescription();
                 optionDescsDefaultValues[i][1] = option.getDefaultValue();
             }
@@ -171,6 +283,12 @@ public class PMDConfigurationForm {
             optionsTable.setModel(new MyTableModel(toDescValueArray2d(dataProjComp.getOptionToValue()), columnNames.toArray()));
         }
         skipTestsCheckBox.setSelected(dataProjComp.isSkipTestSources());
+
+        String storedVersion = dataProjComp.getOptionToValue().get(ConfigOption.PMD_VERSION);
+        pmdVersionCombo.setSelectedItem(storedVersion == null ? "" : storedVersion);
+        lastValidatedVersion = getPmdVersionFromUi();
+        pmdVersionStatusLabel.setForeground(UIManager.getColor("Label.foreground"));
+        pmdVersionStatusLabel.setText(buildCurrentlyLoadedText(storedVersion));
 
         List<String> javaRules = PMDUtil.loadRules(RULESETS_JAVA_PROPERTY_FILE);
         List<String> kotlinRules = PMDUtil.loadRules(RULESETS_KOTLIN_PROPERTY_FILE);
@@ -187,9 +305,9 @@ public class PMDConfigurationForm {
     }
 
     private Object[][] toDescValueArray2d(Map<ConfigOption, String> optionToValue) {
-        String[][] result = new String[ConfigOption.size()][2];
-        for (int i = 0; i < ConfigOption.size(); i++) {
-            ConfigOption option = ConfigOption.values()[i];
+        String[][] result = new String[TABLE_OPTIONS.size()][2];
+        for (int i = 0; i < TABLE_OPTIONS.size(); i++) {
+            ConfigOption option = TABLE_OPTIONS.get(i);
             result[i][0] = option.getDescription();
             String value = optionToValue.get(option);
             result[i][1] = (value != null) ? value : option.getDefaultValue();
@@ -210,12 +328,66 @@ public class PMDConfigurationForm {
         isModified = false;
     }
 
+    /** Returns the PMD version typed or selected in the dedicated section. */
+    public String getPmdVersionFromUi() {
+        return versionEditor().getText().trim();
+    }
+
+    /** Notes that {@code version} has been successfully validated/loaded; clears the "needs validation" state. */
+    public void markVersionValidated(String version) {
+        lastValidatedVersion = version == null ? "" : version.trim();
+        pmdVersionStatusLabel.setForeground(STATUS_OK_GREEN);
+        pmdVersionStatusLabel.setText(buildCurrentlyLoadedText(version));
+    }
+
+    /**
+     * Builds the "Currently loaded: PMD X.Y.Z (bundled)" string. {@code configured} is the
+     * user-typed version (empty when none); we always show the actual library version, and
+     * annotate with "(bundled)" when no explicit version is configured.
+     */
+    private String buildCurrentlyLoadedText(String configured) {
+        String configuredTrimmed = configured == null ? "" : configured.trim();
+        String active;
+        try {
+            active = com.intellij.plugins.bodhi.pmd.core.PMDResultCollector.getActivePmdVersion(project);
+        } catch (Exception e) {
+            LOG.warn("Failed to determine active PMD version", e);
+            return "Currently loaded: (unknown)";
+        }
+        if (configuredTrimmed.isEmpty()) {
+            return "Currently loaded: " + active + " (bundled)";
+        }
+        if (configuredTrimmed.equals(active)) {
+            return "Currently loaded: " + active;
+        }
+        // Configured doesn't match active: fallback in effect or change not yet applied.
+        return "Currently loaded: " + active + " (configured " + configuredTrimmed + ")";
+    }
+
+    /** Marks the section as having an unvalidated change; surfaces an error message. */
+    public void markVersionError(String message) {
+        pmdVersionStatusLabel.setForeground(STATUS_ERROR_RED);
+        pmdVersionStatusLabel.setText(message);
+    }
+
+    /**
+     * @return {@code true} when the user has typed a version that has not yet been validated
+     *   (and therefore Apply must validate before saving).
+     */
+    public boolean needsVersionValidation() {
+        return !java.util.Objects.equals(getPmdVersionFromUi(),
+                lastValidatedVersion == null ? "" : lastValidatedVersion.trim());
+    }
+
     private Map<ConfigOption, String> toOptionToValue(TableModel tm) {
         Map<ConfigOption, String> optionToValue = new EnumMap<>(ConfigOption.class);
         for (int i = 0; i < tm.getRowCount(); i++) {
             ConfigOption option = ConfigOption.fromDescription((String)tm.getValueAt(i, 0));
             optionToValue.put(option, (String) tm.getValueAt(i,1));
         }
+        // PMD version lives in a dedicated UI section, not the table; fold it in here so
+        // the persisted PersistentData.optionKeyToValue map still has a single source of truth.
+        optionToValue.put(ConfigOption.PMD_VERSION, getPmdVersionFromUi());
         return optionToValue;
     }
 
