@@ -2,6 +2,7 @@ package com.intellij.plugins.bodhi.pmd;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.ProjectActivity;
+import com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService;
 import kotlin.Unit;
 import kotlin.coroutines.Continuation;
 import org.jetbrains.annotations.NotNull;
@@ -20,6 +21,8 @@ public class PMDProjectActivity implements ProjectActivity {
             PMDProjectComponent pmdComponent = project.getService(PMDProjectComponent.class);
             if (pmdComponent != null) {
                 pmdComponent.updateCustomMenuFromProject();
+                String pmdVersion = pmdComponent.getOptionToValue().get(ConfigOption.PMD_VERSION);
+                project.getService(PmdProjectService.class).setVersion(pmdVersion);
             }
         }
         return Unit.INSTANCE;

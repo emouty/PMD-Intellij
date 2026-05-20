@@ -1,19 +1,23 @@
-package com.intellij.plugins.bodhi.pmd.core;
+package com.intellij.plugins.bodhi.pmd.pmdbridge;
 
-import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.plugins.bodhi.pmd.pmd.ProgressCallback;
 import net.sourceforge.pmd.lang.document.TextFile;
 import net.sourceforge.pmd.renderers.AbstractRenderer;
 import net.sourceforge.pmd.reporting.Report;
 
+/**
+ * Adapts PMD's per-file progress events to the plugin's {@link ProgressCallback}.
+ * The ProgressCallback type is on the parent classloader so it crosses the boundary
+ * back to the IntelliJ ProgressIndicator in main code.
+ */
 public class PMDProgressRenderer extends AbstractRenderer {
-    private final ProgressIndicator progress;
+    private final ProgressCallback callback;
     private final int totalFiles;
     private int processedFiles = 0;
 
-    public PMDProgressRenderer(ProgressIndicator progress, int totalFiles) {
+    public PMDProgressRenderer(ProgressCallback callback, int totalFiles) {
         super("Progress", "Reports progress to IntelliJ");
-
-        this.progress = progress;
+        this.callback = callback;
         this.totalFiles = totalFiles;
     }
 
@@ -25,8 +29,8 @@ public class PMDProgressRenderer extends AbstractRenderer {
     @Override
     public void startFileAnalysis(TextFile dataSource) {
         processedFiles++;
-        progress.setFraction(processedFiles / (double) totalFiles);
-        progress.setText2(dataSource.getFileId().getOriginalPath());
+        double fraction = totalFiles == 0 ? 0.0 : (processedFiles / (double) totalFiles);
+        callback.onFileProcessed(dataSource.getFileId().getOriginalPath(), fraction);
     }
 
     @Override
@@ -44,5 +48,4 @@ public class PMDProgressRenderer extends AbstractRenderer {
     @Override
     public void end() {
     }
-
 }

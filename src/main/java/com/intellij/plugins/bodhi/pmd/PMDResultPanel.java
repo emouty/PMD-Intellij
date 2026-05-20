@@ -32,8 +32,7 @@ import com.intellij.usageView.UsageViewBundle;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.tree.TreeUtil;
 import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
-import net.sourceforge.pmd.renderers.HTMLRenderer;
-import net.sourceforge.pmd.reporting.Report;
+import com.intellij.plugins.bodhi.pmd.pmd.PmdVersionListener;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -76,6 +75,8 @@ public class PMDResultPanel extends JPanel implements HTMLReloadable {
     private PMDErrorBranchNode processingErrorsNode;
     private boolean scrolling;
     private PMDPopupMenu popupMenu;
+    /** Status label showing the active PMD library version in the tool window. */
+    private final JLabel pmdVersionLabel = new JLabel();
 
     private @NotNull String lastHtmlContent = "";
 
@@ -119,7 +120,24 @@ public class PMDResultPanel extends JPanel implements HTMLReloadable {
         TreeUtil.expandAll(resultTree);
         resultTree.setExpandsSelectedPaths(true);
         resultTree.getSelectionModel().setSelectionMode(SINGLE_TREE_SELECTION);
-        add(buildMainSplit());
+
+        // Right-side column: PMD version status bar above the main result split.
+        JPanel rightColumn = new JPanel();
+        rightColumn.setLayout(new BoxLayout(rightColumn, BoxLayout.Y_AXIS));
+        JPanel versionBar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 2));
+        versionBar.setBorder(JBUI.Borders.empty(2, 6));
+        pmdVersionLabel.setText(buildVersionLabelText());
+        versionBar.add(pmdVersionLabel);
+        rightColumn.add(versionBar);
+        rightColumn.add(buildMainSplit());
+        add(rightColumn);
+
+        // Refresh the label whenever the user changes the PMD version in settings.
+        // PMDProjectComponent is the project-scoped Disposable owning this panel.
+        projectComponent.getCurrentProject().getMessageBus().connect(projectComponent)
+                .subscribe(PmdVersionListener.TOPIC, (PmdVersionListener) newVersion ->
+                        ApplicationManager.getApplication().invokeLater(
+                                () -> pmdVersionLabel.setText(buildVersionLabelText())));
 
         //Add right-click menu to the tree
         createPmdPopupMenu();
@@ -219,6 +237,24 @@ public class PMDResultPanel extends JPanel implements HTMLReloadable {
      *
      * @return The configured main split panel
      */
+    private @NotNull String buildVersionLabelText() {
+        try {
+            String configured = projectComponent.getOptionToValue().get(ConfigOption.PMD_VERSION);
+            String active = com.intellij.plugins.bodhi.pmd.core.PMDResultCollector
+                    .getActivePmdVersion(projectComponent.getCurrentProject());
+            if (configured == null || configured.isEmpty()) {
+                return "PMD " + active + " (bundled)";
+            }
+            if (configured.equals(active)) {
+                return "PMD " + active;
+            }
+            // Configured version requested but a different one loaded — likely fallback.
+            return "PMD " + active + " (requested " + configured + ")";
+        } catch (Exception e) {
+            return "PMD (unknown)";
+        }
+    }
+
     private @NotNull OnePixelSplitter buildMainSplit() {
         configureExampleField(ruleExampleFieldJava, FileTypeManager.getInstance().getFileTypeByExtension("java"));
         configureExampleField(ruleExampleFieldKotlin, FileTypeManager.getInstance().getFileTypeByExtension("kt"));
@@ -510,16 +546,7 @@ public class PMDResultPanel extends JPanel implements HTMLReloadable {
             }
 
             public @NotNull String getReportText() {
-                Report r = PMDResultCollector.getReport();
-                HTMLRenderer renderer = new HTMLRenderer();
-                StringWriter w = new StringWriter();
-                try {
-                    renderer.renderBody(new PrintWriter(w), r);
-                    return w.getBuffer().toString();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                return "";
+                return PMDResultCollector.getLastReportHtml(projectComponent.getCurrentProject());
             }
 
             @NotNull

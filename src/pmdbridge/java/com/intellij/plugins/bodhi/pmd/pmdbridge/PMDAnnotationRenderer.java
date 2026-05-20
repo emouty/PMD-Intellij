@@ -1,7 +1,5 @@
-package com.intellij.plugins.bodhi.pmd.annotator;
+package com.intellij.plugins.bodhi.pmd.pmdbridge;
 
-import com.intellij.openapi.editor.Document;
-import com.intellij.plugins.bodhi.pmd.core.PMDResultAsTreeRenderer;
 import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
 import net.sourceforge.pmd.lang.document.TextFile;
 import net.sourceforge.pmd.renderers.AbstractRenderer;
@@ -11,6 +9,10 @@ import net.sourceforge.pmd.reporting.RuleViolation;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * PMD renderer that converts the report into a list of plugin-side {@link PMDViolation}s
+ * usable by the IntelliJ external annotator.
+ */
 class PMDAnnotationRenderer extends AbstractRenderer {
 
     private final List<PMDViolation> violations = new ArrayList<>();
@@ -47,7 +49,7 @@ class PMDAnnotationRenderer extends AbstractRenderer {
     public void flush() {
     }
 
-    public PMDAnnotations getResult(Document document) {
-        return new PMDAnnotations(new ArrayList<>(violations), document);
+    public List<PMDViolation> getViolations() {
+        return new ArrayList<>(violations);
     }
 }

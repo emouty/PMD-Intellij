@@ -13,12 +13,9 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.plugins.bodhi.pmd.actions.AnEDTAction;
-import com.intellij.plugins.bodhi.pmd.core.PMDJsonExportingRenderer;
 import com.intellij.plugins.bodhi.pmd.core.PMDResultCollector;
+import com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService;
 import com.intellij.util.PlatformIcons;
-import net.sourceforge.pmd.lang.Language;
-import net.sourceforge.pmd.lang.LanguageRegistry;
-import net.sourceforge.pmd.lang.LanguageVersion;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -68,6 +65,12 @@ public class PMDConfigurationForm {
 
         optionsTable.putClientProperty("terminateEditOnFocusLost", true); // fixes issue #45
         optionsTable.setRowHeight(optionsTable.getRowHeight() + 5); // increase space around text
+        // Reserve enough viewport height to show every ConfigOption row without scrolling
+        // (with one extra row's headroom). Set on the table itself so JScrollPane honors it.
+        int rows = ConfigOption.size();
+        int rowHeight = optionsTable.getRowHeight();
+        optionsTable.setPreferredScrollableViewportSize(
+                new Dimension(450, (rows + 1) * rowHeight));
         ruleSetPathJList.setModel(new RuleSetListModel(new ArrayList<>()));
         inEditorAnnotationRuleSets.setModel(new RuleSetListModel(new ArrayList<>()));
         inEditorAnnotationRuleSets.getSelectionModel().addListSelectionListener(new SelectionChangeListener());
@@ -99,7 +102,7 @@ public class PMDConfigurationForm {
             }
             try {
                 initializeActionManager();
-                validKnownCustomRules = PMDUtil.getValidKnownCustomRules();
+                validKnownCustomRules = PMDUtil.getValidKnownCustomRules(project);
             } catch (Exception e) {
                 if (attemptCount < 3) {
                     scheduleActionManagerInit(attemptCount + 1);
@@ -244,7 +247,7 @@ public class PMDConfigurationForm {
                     ruleSetPathJList.setSelectedIndex(listModel.getSize());
                 }
                 String err;
-                if (!(err = PMDResultCollector.isValidRuleSet(rulesPath)).isEmpty()) {
+                if (!(err = PMDResultCollector.isValidRuleSet(project, rulesPath)).isEmpty()) {
                     String message = "The selected file/URL is not valid for PMD 7.";
                     if (err.contains("XML validation errors occurred")) {
                         message += " XML validation errors occurred.";
@@ -377,20 +380,13 @@ public class PMDConfigurationForm {
             if (versionInput.equals(orig)) {
                 return;
             }
-            Language language = Objects.requireNonNull(LanguageRegistry.PMD.getLanguageById(langId));
-            boolean isRegistered = language.hasVersion(versionInput);
-            if (isRegistered) {
-                String registeredVersion = Objects.requireNonNull(language.getVersion(versionInput)).getVersion();
-                optionsTable.setToolTipText(langId + " version " + registeredVersion);
-            }
-            else {
+            List<String> versions = project.getService(PmdProjectService.class).getRunner().getSupportedVersions(langId);
+            if (versionInput.isEmpty() || versions.isEmpty() || versions.contains(versionInput)) {
+                optionsTable.setToolTipText(langId + " version " + versionInput);
+            } else {
                 super.setValueAt(orig, row, column);
-                List<LanguageVersion> langVersions = language.getVersions();
-                List<String> versions = new ArrayList<>();
-                for (LanguageVersion langVersion : langVersions) {
-                    versions.add(langVersion.getVersion());
-                }
-                String maxTenMostRecentVersions = String.join(",", versions.subList(Math.max(versions.size() - 10, 0), versions.size()));
+                String maxTenMostRecentVersions = String.join(",",
+                        versions.subList(Math.max(versions.size() - 10, 0), versions.size()));
                 String tipText = "For " + langId + " version take one of: " + maxTenMostRecentVersions;
                 optionsTable.setToolTipText(tipText);
                 isModified = origIsMod;
@@ -411,7 +407,7 @@ public class PMDConfigurationForm {
             if (!urlInput.isEmpty()) {
                 if (PMDUtil.isValidUrl(urlInput)) {
                     String content = "{\"test connection\"}\n";
-                    String exportMsg = PMDJsonExportingRenderer.tryJsonExport(content, urlInput);
+                    String exportMsg = PMDUtil.tryJsonExport(content, urlInput);
                     if (!exportMsg.isEmpty()) {
                         optionsTable.setToolTipText("Previous input - Failure for '" + urlInput + "': " + exportMsg);
                         super.setValueAt(orig, row, column);
@@ -530,7 +526,7 @@ public class PMDConfigurationForm {
             add(label);
             final Vector<String> elements = new Vector<>();
             elements.add(defaultValue);
-            Set<String> ruleSetNames = PMDUtil.getValidKnownCustomRules().keySet();
+            Set<String> ruleSetNames = PMDUtil.getValidKnownCustomRules(project).keySet();
             elements.addAll(ruleSetNames);
 
             ComboBoxModel<String> model = new DefaultComboBoxModel<>(elements);

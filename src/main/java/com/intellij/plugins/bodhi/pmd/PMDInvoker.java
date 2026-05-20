@@ -17,8 +17,8 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileFilter;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
-import com.intellij.plugins.bodhi.pmd.core.PMDProgressRenderer;
 import com.intellij.plugins.bodhi.pmd.core.PMDResultCollector;
+import com.intellij.plugins.bodhi.pmd.pmd.ProgressCallback;
 import com.intellij.plugins.bodhi.pmd.tree.PMDRootNode;
 import com.intellij.plugins.bodhi.pmd.tree.PMDRuleSetEntryNode;
 import com.intellij.plugins.bodhi.pmd.tree.PMDRuleSetNode;
@@ -169,7 +169,14 @@ public class PMDInvoker {
                 rootNode.setRuleSetCount(ruleSetPathArray.length);
                 rootNode.setRunning(true);
 
-                PMDProgressRenderer progressRenderer = new PMDProgressRenderer(progress, files.size() * ruleSetPathArray.length);
+                // fraction is per-ruleset (0..1); offset by the number of already-completed
+                // rulesets and divide by the ruleset count so the bar spans the whole run
+                // instead of resetting to 0 at the start of each ruleset.
+                int[] completedRuleSets = {0};
+                ProgressCallback progressCallback = (path, fraction) -> {
+                    progress.setFraction(Math.min(1.0, (completedRuleSets[0] + fraction) / (double) ruleSetPathArray.length));
+                    progress.setText2(path);
+                };
                 try {
                     final PsiManager psiManager = PsiManager.getInstance(project);
 
@@ -191,13 +198,13 @@ public class PMDInvoker {
                                 }),
                                 ruleSetPath,
                                 projectComponent,
-                                progressRenderer);
+                                progressCallback);
                         // sort rules by priority, rule and suppressed nodes are comparable
                         resultRuleNodes.sort(null);
 
                         if (!resultRuleNodes.isEmpty()) {
                             String ruleSetName = PMDUtil.getBareFileNameFromPath(ruleSetPath);
-                            String desc = PMDResultCollector.getRuleSetDescription(ruleSetPath);
+                            String desc = PMDResultCollector.getRuleSetDescription(project, ruleSetPath);
                             PMDRuleSetNode ruleSetNode = resultPanel.addCreateRuleSetNodeAtRoot(ruleSetName);
                             ruleSetNode.setToolTip(desc);
                             //Add all rule nodes to the tree
@@ -207,6 +214,7 @@ public class PMDInvoker {
                             rootNode.calculateCounts();
                             resultPanel.reloadResultTree();
                         }
+                        completedRuleSets[0]++;
                         if (progress.isCanceled()) {
                             break;
                         }
