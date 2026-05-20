@@ -126,7 +126,7 @@ public class PMDCheckinHandler extends CheckinHandler {
                 }),
                 ruleSetPath,
                 plugin,
-                null);
+                (path, fraction) -> { /* no progress reporting during checkin */ });
         if (!ruleSetResultNodes.isEmpty()) {
             ruleSetResultNode = createRuleSetNodeWithResults(ruleSetPath, ruleSetResultNodes);
         }

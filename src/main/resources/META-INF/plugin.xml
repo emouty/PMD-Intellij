@@ -50,7 +50,12 @@
     <postStartupActivity implementation="com.intellij.plugins.bodhi.pmd.PMDProjectActivity"/>
     <postStartupActivity implementation="com.intellij.plugins.bodhi.pmd.PMDProjectSwitchListener"/>
     <applicationService serviceImplementation="com.intellij.plugins.bodhi.pmd.annotator.langversion.LanguageVersionResolverService"/>
+    <projectService serviceImplementation="com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService"/>
   </extensions>
+  <projectListeners>
+    <listener class="com.intellij.plugins.bodhi.pmd.pmd.PmdVersionChangeHandler"
+              topic="com.intellij.plugins.bodhi.pmd.pmd.PmdVersionListener"/>
+  </projectListeners>
   <!-- Not detected when inside plugin-kotlin.xml -->
   <extensions defaultExtensionNs="org.jetbrains.kotlin">
     <supportsKotlinPluginMode supportsK2="true" />

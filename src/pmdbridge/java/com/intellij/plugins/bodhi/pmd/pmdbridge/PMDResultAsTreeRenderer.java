@@ -1,6 +1,17 @@
-package com.intellij.plugins.bodhi.pmd.core;
+package com.intellij.plugins.bodhi.pmd.pmdbridge;
 
-import com.intellij.plugins.bodhi.pmd.tree.*;
+import com.intellij.plugins.bodhi.pmd.core.PMDProcessingError;
+import com.intellij.plugins.bodhi.pmd.core.PMDSuppressedViolation;
+import com.intellij.plugins.bodhi.pmd.core.PMDUselessSuppression;
+import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
+import com.intellij.plugins.bodhi.pmd.core.RuleKey;
+import com.intellij.plugins.bodhi.pmd.tree.PMDErrorBranchNode;
+import com.intellij.plugins.bodhi.pmd.tree.PMDRuleNode;
+import com.intellij.plugins.bodhi.pmd.tree.PMDRuleSetEntryNode;
+import com.intellij.plugins.bodhi.pmd.tree.PMDSuppressedBranchNode;
+import com.intellij.plugins.bodhi.pmd.tree.PMDTreeNodeFactory;
+import com.intellij.plugins.bodhi.pmd.tree.PMDUselessSuppressionBranchNode;
 import net.sourceforge.pmd.lang.ast.FileAnalysisException;
 import net.sourceforge.pmd.lang.ast.LexException;
 import net.sourceforge.pmd.lang.document.FileId;
@@ -25,28 +36,32 @@ import static net.sourceforge.pmd.reporting.RuleViolation.METHOD_NAME;
 import static net.sourceforge.pmd.reporting.RuleViolation.PACKAGE_NAME;
 
 /**
- * Renders PMD results into the plugin's tree model. This is the bridge between PMD's
- * type system and the plugin's PMD-type-free domain types ({@link RuleInfo},
- * {@link PMDViolation}, {@link PMDSuppressedViolation}, {@link PMDProcessingError}).
+ * Renders PMD results into the plugin's tree model. Bridge between PMD's type system
+ * and the plugin's PMD-type-free domain types ({@link RuleInfo}, {@link PMDViolation},
+ * {@link PMDSuppressedViolation}, {@link PMDProcessingError}).
  *
  * @author jborgers
  */
 public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
 
     private static final Log log = LogFactory.getLog(PMDResultAsTreeRenderer.class);
+    // report and swallow so the remaining results still get rendered
     private static final String EXCEPTION_SWALLOWED = "Exception caught and swallowed: ";
     private static final Pattern LOCATION_PATTERN = Pattern.compile("line (?<line>\\d+), column (?<column>\\d+)");
 
     private final List<PMDRuleSetEntryNode> pmdRuleResultNodes;
     private final PMDErrorBranchNode processingErrorsNode;
     private final UselessSuppressionsHelper uselessSupHelper;
-    private final Map<RuleKey, PMDRuleNode> ruleKeyToNodeMap = new TreeMap<>(); // order by priority and then name
+    private final Map<RuleKey, PMDRuleNode> ruleKeyToNodeMap = new TreeMap<>();
 
-    public PMDResultAsTreeRenderer(List<PMDRuleSetEntryNode> pmdRuleSetResults, PMDErrorBranchNode errorsNode, String ruleSetPath) {
+    public PMDResultAsTreeRenderer(List<PMDRuleSetEntryNode> pmdRuleSetResults,
+                                   PMDErrorBranchNode errorsNode,
+                                   String ruleSetPath,
+                                   PmdRunnerImpl runnerForRuleSet) {
         super("pmdplugin", "PMD plugin renderer");
         this.pmdRuleResultNodes = pmdRuleSetResults;
-        processingErrorsNode = errorsNode;
-        uselessSupHelper = new UselessSuppressionsHelper(ruleSetPath);
+        this.processingErrorsNode = errorsNode;
+        this.uselessSupHelper = new UselessSuppressionsHelper(ruleSetPath, runnerForRuleSet);
     }
 
     @Override
@@ -64,9 +79,7 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
                 }
                 ruleNode.add(nodeFactory.createViolationLeafNode(toPMDViolation(ruleViolation)));
                 uselessSupHelper.storeRuleNameForMethod(ruleViolation);
-            }
-            catch(Exception e) {
-                // report and swallow so following violations will still be rendered
+            } catch (Exception e) {
                 log.error(EXCEPTION_SWALLOWED, e);
             }
         }
@@ -87,9 +100,7 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
                         processingErrorsNode.add(nodeFactory.createErrorLeafNode(toPMDProcessingError(error)));
                         processingErrorsNode.registerFile(filePath);
                     }
-                }
-                catch(Exception e) {
-                    // report and swallow so following processing error will still be rendered
+                } catch (Exception e) {
                     log.error(EXCEPTION_SWALLOWED, e);
                 }
             }
@@ -108,17 +119,15 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
             PMDTreeNodeFactory nodeFactory = PMDTreeNodeFactory.getInstance();
             PMDSuppressedBranchNode suppressedByNoPmdNode = nodeFactory.createSuppressedBranchNode("Suppressed violations by //NOPMD");
             PMDSuppressedBranchNode suppressedByAnnotationNode = nodeFactory.createSuppressedBranchNode("Suppressed violations by Annotation");
-            for (Report.SuppressedViolation suppressed : suppressed) {
+            for (Report.SuppressedViolation s : suppressed) {
                 try {
-                    if (suppressed.getSuppressor() == ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR) {
-                        suppressedByNoPmdNode.add(nodeFactory.createSuppressedLeafNode(toPMDSuppressedViolation(suppressed)));
+                    if (s.getSuppressor() == ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR) {
+                        suppressedByNoPmdNode.add(nodeFactory.createSuppressedLeafNode(toPMDSuppressedViolation(s)));
                     } else {
-                        suppressedByAnnotationNode.add(nodeFactory.createSuppressedLeafNode(toPMDSuppressedViolation(suppressed)));
-                        uselessSupHelper.storeRuleNameForMethod(suppressed);
+                        suppressedByAnnotationNode.add(nodeFactory.createSuppressedLeafNode(toPMDSuppressedViolation(s)));
+                        uselessSupHelper.storeRuleNameForMethod(s);
                     }
-                }
-                catch(Exception e) {
-                    // report and swallow so following suppressed violations will still be rendered
+                } catch (Exception e) {
                     log.error(EXCEPTION_SWALLOWED, e);
                 }
             }
@@ -137,13 +146,12 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
         List<PMDUselessSuppression> uselessSuppressions = uselessSupHelper.findUselessSuppressions(ruleKeyToNodeMap);
         if (!uselessSuppressions.isEmpty()) {
             PMDTreeNodeFactory nodeFactory = PMDTreeNodeFactory.getInstance();
-            PMDUselessSuppressionBranchNode uselessSuppressionNode = nodeFactory.createUselessSuppressionBranchNode("Useless suppressions");
+            PMDUselessSuppressionBranchNode uselessSuppressionNode =
+                    nodeFactory.createUselessSuppressionBranchNode("Useless suppressions");
             for (PMDUselessSuppression uselessSuppression : uselessSuppressions) {
                 try {
                     uselessSuppressionNode.add(nodeFactory.createUselessSuppressionLeafNode(uselessSuppression));
-                }
-                catch(Exception e) {
-                    // report and swallow so following useless suppressions will still be rendered
+                } catch (Exception e) {
                     log.error(EXCEPTION_SWALLOWED, e);
                 }
             }
@@ -184,12 +192,13 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
                 rule.getPriority().getName(),
                 rule.getLanguage().getId(),
                 tags,
-                List.copyOf(rule.getExamples())
+                rule.getExamples() == null ? List.of() : List.copyOf(rule.getExamples())
         );
     }
 
     public static PMDViolation toPMDViolation(RuleViolation rv) {
         RuleInfo ri = toRuleInfo(rv.getRule());
+        // seems the file can be unknown in some cases (for kotlin?)
         boolean unknownFile = rv.getFileId() == FileId.UNKNOWN;
         String filePath = unknownFile ? null : rv.getFileId().getOriginalPath();
         Map<String, String> info = rv.getAdditionalInfo();
@@ -233,8 +242,10 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
         }
         String msg;
         if (err instanceof FileAnalysisException) {
+            // a proper PMDException indicating for instance wrong java version
             msg = error.getMsg();
         } else if (err != null) {
+            // error in PMD, for instance a NullPointerException, build our own message
             msg = err.getClass().getSimpleName() + ": Error while parsing " + error.getFileId();
         } else {
             msg = error.getMsg();

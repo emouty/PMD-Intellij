@@ -8,7 +8,10 @@ public enum ConfigOption {
     TARGET_JDK("Target JDK", "Target Java version", ""),
     TARGET_KOTLIN_VERSION("Target Kotlin version", "Target Kotlin version", ""),
     STATISTICS_URL("Statistics URL", "Statistics URL to export usage anonymously", ""),
-    THREADS("Threads", "Threads (fastest: " + PMDUtil.AVAILABLE_PROCESSORS + ")", String.valueOf(PMDUtil.AVAILABLE_PROCESSORS));
+    THREADS("Threads", "Threads (fastest: " + PMDUtil.AVAILABLE_PROCESSORS + ")", String.valueOf(PMDUtil.AVAILABLE_PROCESSORS)),
+    PMD_VERSION("PMD version",
+            "PMD version to use (empty = bundled default; must be available in ~/.m2)",
+            "");
 
     /**
      * key is used for persisting

@@ -23,6 +23,7 @@ import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -60,20 +61,19 @@ public abstract class PMDExternalLanguageAnnotator extends ExternalAnnotator<Fil
         }
 
         PMDResultCollector collector = new PMDResultCollector();
-        PMDAnnotationRenderer renderer = new PMDAnnotationRenderer();
+        List<PMDViolation> allViolations = new ArrayList<>();
         for (String ruleSetPath : inEditorAnnotationActiveRuleSets) {
             if (isRuleSetForGivenFile(info, ruleSetPath)) {
-                collector.runPMDAndGetResultsForSingleFileNew(
+                allViolations.addAll(collector.runPMDAndGetResultsForSingleFileNew(
                         info.file(),
                         info.languageId(),
                         info.languageVersion(),
                         ruleSetPath,
-                        projectComponent,
-                        renderer);
+                        projectComponent));
             }
         }
 
-        return renderer.getResult(info.document());
+        return new PMDAnnotations(allViolations, info.document());
     }
 
     private static boolean isRuleSetForGivenFile(FileInfo info, String ruleSetPath) {

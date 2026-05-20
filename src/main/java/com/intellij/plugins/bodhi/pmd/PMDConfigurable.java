@@ -2,6 +2,7 @@ package com.intellij.plugins.bodhi.pmd;
 
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.project.Project;
+import com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
@@ -42,6 +43,10 @@ public class PMDConfigurable implements Configurable {
         if (form != null) {
             form.getDataFromUi(component);
         }
+        // Push the PMD version into the project service so the next analysis uses
+        // the correct classloader. A null/empty value reverts to the bundled default.
+        String version = component.getOptionToValue().get(ConfigOption.PMD_VERSION);
+        project.getService(PmdProjectService.class).setVersion(version);
         component.buildCustomActions();
     }
 

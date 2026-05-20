@@ -26,10 +26,45 @@ repositories {
     }
 }
 
+// ----------------------------------------------------------------------
+// pmdbridge source set
+//
+// Bridge code that calls PMD APIs. Compiled against PMD as compileOnly, packaged
+// SEPARATELY from the main JAR (under <plugin>/pmd/classes/ in the dist) so it is
+// loaded only via the per-version ChildFirstURLClassLoader created at runtime
+// by PmdProjectService — never by the main plugin classloader.
+//
+// Default PMD JARs are bundled under <plugin>/pmd/lib/default/ and feed the same
+// classloader when no user version is configured. See pmd/PmdProjectService.java.
+// ----------------------------------------------------------------------
+sourceSets {
+    create("pmdbridge") {
+        java.srcDirs("src/pmdbridge/java")
+        // See main's compile classpath (IntelliJ Platform + main output) plus pmdbridge-only PMD
+        compileClasspath = sourceSets["main"].compileClasspath +
+                sourceSets["main"].output +
+                configurations.getByName("pmdbridgeCompileClasspath")
+    }
+}
+
+// Configuration that resolves the default PMD JARs to bundle in the plugin dist.
+val bundledPmd: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
 dependencies {
-    implementation(libs.bundles.pmd) {
+    // PMD is compileOnly for pmdbridge. It must NOT appear on the main runtime classpath
+    // — main code is PMD-free and loads PMD only through the version-pinned classloader.
+    "pmdbridgeCompileOnly"(libs.bundles.pmd) {
         // Prevent conflict with IntelliJ's slf4j which results in a LinkageError
+        exclude("org.slf4j", module = "slf4j-api")
+    }
+
+    // Default PMD JARs to bundle inside the plugin distribution (loaded by the runtime
+    // classloader when no user version is configured).
+    bundledPmd(libs.bundles.pmd) {
         exclude("org.slf4j", module = "slf4j-api")
     }
 
@@ -37,6 +72,12 @@ dependencies {
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.junit.jupiter)
     testImplementation(libs.assertj.core)
+    // pmdbridge output + PMD itself, so a unit test can call package-private bridge logic
+    // (e.g. language-version grouping) directly instead of through the runtime classloader.
+    testImplementation(sourceSets["pmdbridge"].output)
+    testImplementation(libs.bundles.pmd) {
+        exclude("org.slf4j", module = "slf4j-api")
+    }
     testRuntimeOnly(libs.junit.platform.launcher)
     // Not used by our tests (all JUnit 5): the platform test-framework jar needs JUnit 3/4
     // classes at runtime to instantiate its LauncherSessionListener service.
@@ -130,6 +171,15 @@ changelog {
     repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
 }
 
+// pmdbridge output is packaged as a separate JAR to be loaded via the runtime classloader.
+// Version-free file name so PmdClassLoaderContainer.locatePmdbridgeJar() can find it by exact
+// path inside the installed plugin directory.
+val pmdbridgeJar by tasks.registering(Jar::class) {
+    archiveBaseName.set("pmdbridge")
+    archiveVersion.set("")
+    from(sourceSets["pmdbridge"].output)
+}
+
 tasks {
     withType<JavaCompile> {
         options.compilerArgs.add("-Xlint:deprecation")
@@ -144,6 +194,36 @@ tasks {
 
     publishPlugin {
         dependsOn(patchChangelog)
+    }
+
+    // Place the pmdbridge JAR and the default PMD JARs into <plugin>/pmd/ inside the
+    // sandbox / plugin distribution. They are intentionally outside <plugin>/lib/ so
+    // the main plugin classloader does not pick them up; PmdProjectService loads them
+    // via its own URLClassLoader.
+    //
+    // Note: prepareSandbox places the main plugin JAR under <sandbox>/plugins/<projectName>/lib/.
+    // buildPlugin later renames that top-level directory to match archiveBaseName for the
+    // distribution zip. So we use rootProject.name here; buildPlugin's rename carries the
+    // pmd/ subdirectory along.
+    val sandboxPluginDir = rootProject.name
+    prepareSandbox {
+        from(pmdbridgeJar) {
+            into("$sandboxPluginDir/pmd/")
+        }
+        from(bundledPmd) {
+            into("$sandboxPluginDir/pmd/lib/default/")
+        }
+    }
+    // Platform tests (BasePlatformTestCase) load the plugin from this sandbox, so it
+    // needs the same pmd/ layout runIde gets — otherwise PmdClassLoaderContainer cannot
+    // locate pmdbridge.jar or the bundled PMD JARs.
+    prepareTestSandbox {
+        from(pmdbridgeJar) {
+            into("$sandboxPluginDir/pmd/")
+        }
+        from(bundledPmd) {
+            into("$sandboxPluginDir/pmd/lib/default/")
+        }
     }
 
     test {
