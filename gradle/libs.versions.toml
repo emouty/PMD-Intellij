@@ -1,6 +1,8 @@
 [versions]
 # libraries
-junit = "4.13.2"
+junitJupiter = "6.0.3"
+mockito = "5.20.0"
+assertj = "3.27.3"
 pmd = "7.21.0"
 
 # plugins
@@ -9,7 +11,14 @@ intelliJPlatform = "2.10.5"
 kotlin = "2.3.0"
 
 [libraries]
-junit = { group = "junit", name = "junit", version.ref = "junit" }
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junitJupiter" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junitJupiter" }
+# Runtime-only: the IntelliJ test-framework jar service-loads JUnit5TestSessionListener,
+# whose initializer touches UsefulTestCase (JUnit 3 lineage inside the junit:junit jar).
+junit-legacy = { group = "junit", name = "junit", version = "4.13.2" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
+mockito-junit-jupiter = { group = "org.mockito", name = "mockito-junit-jupiter", version.ref = "mockito" }
+assertj-core = { group = "org.assertj", name = "assertj-core", version.ref = "assertj" }
 pmd-core = { group = "net.sourceforge.pmd", name = "pmd-core", version.ref = "pmd" }
 pmd-java = { group = "net.sourceforge.pmd", name = "pmd-java", version.ref = "pmd" }
 pmd-kotlin = { group = "net.sourceforge.pmd", name = "pmd-kotlin", version.ref = "pmd" }

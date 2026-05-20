@@ -2,59 +2,63 @@ package com.intellij.plugins.bodhi.pmd.tree;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.JBColor;
-import net.sourceforge.pmd.lang.rule.RulePriority;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toMap;
 
 /**
- * Severity enum for 5 levels, with name, PMD priority, icon and color.
+ * Severity enum for 5 levels, with name, PMD priority (1-5), icon and color.
+ * PMD priority: 1 (Blocker, highest) through 5 (Info, lowest).
  *
  * @author jborgers
  */
 public enum Severity {
-    BLOCKER(RulePriority.HIGH, "Blocker", AllIcons.Ide.FatalError,
+    BLOCKER(1, "Blocker", AllIcons.Ide.FatalError,
             new JBColor(new Color(218, 8, 8), new Color(255, 98, 98))),
-    HIGH(RulePriority.MEDIUM_HIGH, "High", PMDIcons.ICON_HIGH,
+    HIGH(2, "High", PMDIcons.ICON_HIGH,
             new JBColor(new Color(208, 108, 8), new Color(255, 158, 8))),
-    MEDIUM(RulePriority.MEDIUM, "Medium", AllIcons.General.Warning,
+    MEDIUM(3, "Medium", AllIcons.General.Warning,
             new JBColor(new Color(178, 118, 8), new Color(248, 198, 8))),
-    LOW(RulePriority.MEDIUM_LOW, "Low", AllIcons.Nodes.WarningIntroduction,
+    LOW(4, "Low", AllIcons.Nodes.WarningIntroduction,
             new JBColor(new Color(128, 128, 118), new Color(208, 208, 198))),
-    INFO(RulePriority.LOW, "Info", AllIcons.General.Information,
+    INFO(5, "Info", AllIcons.General.Information,
             new JBColor(new Color(48, 78, 208), new Color(148, 188, 255)));
 
-    private final RulePriority rulePriority;
+    private final int priority;
     private final String name;
     private final Icon icon;
     private final Color color;
 
-    private static final Map<RulePriority, Severity> prioToSeverity = Stream.of(values()).collect(toMap(Severity::getRulePriority, Function.identity()));
-    private static final Map<RulePriority, Icon> prioToIcon = Stream.of(values()).collect(toMap(Severity::getRulePriority, Severity::getIcon));
+    private static final Map<Integer, Severity> priorityToSeverity = new HashMap<>();
+    private static final Map<Integer, Icon> priorityToIcon = new HashMap<>();
 
+    static {
+        for (Severity s : values()) {
+            priorityToSeverity.put(s.priority, s);
+            priorityToIcon.put(s.priority, s.icon);
+        }
+    }
 
-    Severity(@NotNull RulePriority rulePrio, @NotNull String nm, @NotNull Icon ic, @NotNull Color c) {
-        rulePriority = rulePrio;
+    Severity(int prio, @NotNull String nm, @NotNull Icon ic, @NotNull Color c) {
+        priority = prio;
         name = nm;
         icon = ic;
         color = c;
     }
 
-    public RulePriority getRulePriority() {
-        return rulePriority;
+    public int getPriority() {
+        return priority;
     }
 
-    public static Severity of(@NotNull RulePriority rulePrio) {
-        return prioToSeverity.get(rulePrio);
+    public static Severity of(int priority) {
+        return priorityToSeverity.get(priority);
     }
-    public static Icon iconOf(@NotNull RulePriority rulePrio) {
-        return prioToIcon.get(rulePrio);
+
+    public static Icon iconOf(int priority) {
+        return priorityToIcon.get(priority);
     }
 
     public String getName() {
@@ -65,17 +69,12 @@ public enum Severity {
         return icon;
     }
 
-    public Color getColor() { return color; }
+    public Color getColor() {
+        return color;
+    }
 
     @Override
     public String toString() {
-        return "Severity{" +
-                "rulePriority=" + rulePriority +
-                ", name='" + name + '\'' +
-                ", icon=" + icon +
-                ", color=" + color +
-                '}';
+        return "Severity{priority=" + priority + ", name='" + name + '\'' + '}';
     }
-
-
 }

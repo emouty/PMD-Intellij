@@ -33,7 +33,14 @@ dependencies {
         exclude("org.slf4j", module = "slf4j-api")
     }
 
-    testImplementation(libs.junit)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    // Not used by our tests (all JUnit 5): the platform test-framework jar needs JUnit 3/4
+    // classes at runtime to instantiate its LauncherSessionListener service.
+    testRuntimeOnly(libs.junit.legacy)
 
     intellijPlatform {
         // https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html#setting-up-intellij-platform
@@ -52,6 +59,7 @@ dependencies {
         pluginVerifier()
         zipSigner()
         testFramework(TestFrameworkType.Platform)
+        testFramework(TestFrameworkType.JUnit5)
     }
 }
 
@@ -136,6 +144,10 @@ tasks {
 
     publishPlugin {
         dependsOn(patchChangelog)
+    }
+
+    test {
+        useJUnitPlatform()
     }
 }
 
