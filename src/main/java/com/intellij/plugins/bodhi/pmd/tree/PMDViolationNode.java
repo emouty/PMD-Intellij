@@ -3,13 +3,12 @@ package com.intellij.plugins.bodhi.pmd.tree;
 import com.intellij.plugins.bodhi.pmd.core.HasMessage;
 import com.intellij.plugins.bodhi.pmd.core.HasRule;
 import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
-import net.sourceforge.pmd.lang.rule.Rule;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 
 import static com.intellij.ui.SimpleTextAttributes.GRAYED_ATTRIBUTES;
 
 /**
- * This is a tree leaf node that will encapsulate a PMD Violation. It implements
- * Navigatable, so that the user can navigate to the source of the problem.
+ * Tree leaf node wrapping a {@link PMDViolation}. Navigatable so the user can jump to source.
  *
  * @author bodhi
  * @version 1.2
@@ -31,7 +30,6 @@ public class PMDViolationNode extends PMDLeafNode implements HasRule, HasMessage
         return pmdViolation;
     }
 
-
     /**
      * Open editor and select/navigate to the correct line and column.
      *
@@ -47,7 +45,7 @@ public class PMDViolationNode extends PMDLeafNode implements HasRule, HasMessage
 
     public void render(PMDCellRenderer cellRenderer, boolean expanded) {
         cellRenderer.setIconForRulePriority(pmdViolation.getRulePriority());
-        //Show violation position greyed, like idea shows.
+        // Show violation position greyed, like idea shows.
         cellRenderer.append(pmdViolation.getPositionText(), GRAYED_ATTRIBUTES);
         cellRenderer.append(pmdViolation.getClassAndMethodMsg());
         cellRenderer.append(pmdViolation.getPackageMsg(), GRAYED_ATTRIBUTES);
@@ -60,12 +58,12 @@ public class PMDViolationNode extends PMDLeafNode implements HasRule, HasMessage
 
     @Override
     public int getSevViolationCount(Severity sev) {
-        return (sev.getRulePriority() == pmdViolation.getRulePriority()) ? 1 : 0;
+        return (sev.getPriority() == pmdViolation.getRulePriority()) ? 1 : 0;
     }
 
     @Override
-    public Rule getRule() {
-        return pmdViolation.getRule();
+    public RuleInfo getRuleInfo() {
+        return pmdViolation.getRuleInfo();
     }
 
     @Override

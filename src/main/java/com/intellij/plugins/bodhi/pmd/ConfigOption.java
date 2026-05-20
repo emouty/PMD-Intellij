@@ -1,15 +1,12 @@
 package com.intellij.plugins.bodhi.pmd;
 
-import net.sourceforge.pmd.lang.LanguageRegistry;
-
-import java.util.Objects;
-
 /**
- * Configuration options enumeration. Separation between key for persistent state and description to show in the UI.
+ * Configuration options. Each entry has a stable key (for persistence), a description
+ * (shown in the UI), and a default value applied when no user value is set.
  */
 public enum ConfigOption {
-    TARGET_JDK("Target JDK", "Target Java version (max: " + latestSupportLanguageVersionByPmd("java") + ")", latestSupportLanguageVersionByPmd("java")),
-    TARGET_KOTLIN_VERSION("Target Kotlin version", "Target Kotlin version (max: " + latestSupportLanguageVersionByPmd("kotlin") + ")", latestSupportLanguageVersionByPmd("kotlin")),
+    TARGET_JDK("Target JDK", "Target Java version", ""),
+    TARGET_KOTLIN_VERSION("Target Kotlin version", "Target Kotlin version", ""),
     STATISTICS_URL("Statistics URL", "Statistics URL to export usage anonymously", ""),
     THREADS("Threads", "Threads (fastest: " + PMDUtil.AVAILABLE_PROCESSORS + ")", String.valueOf(PMDUtil.AVAILABLE_PROCESSORS));
 
@@ -28,10 +25,6 @@ public enum ConfigOption {
      */
     private final String defaultValue;
 
-    private static String latestSupportLanguageVersionByPmd(String langId) {
-        return Objects.requireNonNull(LanguageRegistry.PMD.getLanguageById(langId)).getLatestVersion().getVersion();
-    }
-
     public static ConfigOption fromKey(String key) {
         for (ConfigOption option : ConfigOption.values()) {
             if (option.getKey().equals(key)) {
@@ -40,6 +33,7 @@ public enum ConfigOption {
         }
         throw new IllegalArgumentException("Unknown config option key: " + key);
     }
+
     public static ConfigOption fromDescription(String desc) {
         for (ConfigOption option : ConfigOption.values()) {
             if (option.getDescription().equals(desc)) {
@@ -48,6 +42,7 @@ public enum ConfigOption {
         }
         throw new IllegalArgumentException("Unknown config option description: " + desc);
     }
+
     public static int size() {
         return ConfigOption.values().length;
     }
@@ -57,12 +52,15 @@ public enum ConfigOption {
         this.description = description;
         this.defaultValue = defaultValue;
     }
+
     public String getKey() {
         return key;
     }
+
     public String getDescription() {
         return description;
     }
+
     public String getDefaultValue() {
         return defaultValue;
     }

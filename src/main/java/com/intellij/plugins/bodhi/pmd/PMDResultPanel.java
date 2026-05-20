@@ -31,7 +31,7 @@ import com.intellij.ui.treeStructure.Tree;
 import com.intellij.usageView.UsageViewBundle;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.tree.TreeUtil;
-import net.sourceforge.pmd.lang.rule.Rule;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 import net.sourceforge.pmd.renderers.HTMLRenderer;
 import net.sourceforge.pmd.reporting.Report;
 import org.jetbrains.annotations.NotNull;
@@ -314,12 +314,12 @@ public class PMDResultPanel extends JPanel implements HTMLReloadable {
             return;
         }
         EditorTextField exampleField = ruleExampleFieldJava; // default
-        Rule rule = null;
+        RuleInfo rule = null;
         String message = "";
         if (node instanceof HasRule) {
-            rule = ((HasRule) node).getRule();
-            message = rule.getMessage();
-            String langId = rule.getLanguage().getId(); // java or kotlin
+            rule = ((HasRule) node).getRuleInfo();
+            message = rule.message();
+            String langId = rule.languageId(); // java or kotlin
             if (langId.equals("kotlin")) {
                 exampleText = getFormattedExamples(rule, "Kotlin");
                 exampleField = ruleExampleFieldKotlin;
@@ -345,14 +345,14 @@ public class PMDResultPanel extends JPanel implements HTMLReloadable {
         // browser will adjust split proportion
     }
 
-    private static @NotNull String getFormattedExamples(@Nullable Rule rule, @NotNull String language) {
+    private static @NotNull String getFormattedExamples(@Nullable RuleInfo rule, @NotNull String language) {
         String examples = "// No " + language + " example available.";
         if (rule != null) {
             StringBuilder examplesBld = new StringBuilder();
-            for (String example : rule.getExamples()) {
+            for (String example : rule.examples()) {
                 examplesBld.append(example.trim()).append("\n\n");
             }
-            if (!rule.getExamples().isEmpty() && examplesBld.length() > 4) {
+            if (!rule.examples().isEmpty() && examplesBld.length() > 4) {
                 examples = "// " + language + " example(s):\n" + examplesBld;
             }
         }

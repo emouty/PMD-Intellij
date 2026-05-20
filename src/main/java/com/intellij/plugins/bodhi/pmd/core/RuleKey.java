@@ -1,12 +1,13 @@
 package com.intellij.plugins.bodhi.pmd.core;
 
-import net.sourceforge.pmd.lang.rule.Rule;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
 
 /**
- * Class for using Rule as key in a Map, and to compare/sort first by priority and then by name
+ * Key for using a Rule as map key, and to compare/sort first by priority then by name.
+ * Holds only primitive data: no PMD type dependency.
+ *
  * @author jborgers
  */
 public class RuleKey implements Comparable<RuleKey> {
@@ -16,11 +17,6 @@ public class RuleKey implements Comparable<RuleKey> {
     public RuleKey(@NotNull String name, int priority) {
         this.name = name;
         this.priority = priority;
-    }
-
-    public RuleKey(@NotNull Rule rule) {
-        name = rule.getName();
-        priority = rule.getPriority().getPriority();
     }
 
     @Override

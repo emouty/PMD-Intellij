@@ -1,8 +1,12 @@
 package com.intellij.plugins.bodhi.pmd.annotator;
 
 import com.intellij.openapi.editor.Document;
-import net.sourceforge.pmd.reporting.Report;
+import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
 
-public record PMDAnnotations(Report report,
-                             Document document) {
+import java.util.List;
+
+/**
+ * Result of in-editor PMD annotation: violations to render plus the originating document.
+ */
+public record PMDAnnotations(List<PMDViolation> violations, Document document) {
 }

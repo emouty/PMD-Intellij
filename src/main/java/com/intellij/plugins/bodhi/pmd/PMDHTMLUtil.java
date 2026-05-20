@@ -5,14 +5,12 @@ import com.intellij.ide.BrowserUtil;
 import com.intellij.ide.ui.LafManagerListener;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 import com.intellij.plugins.bodhi.pmd.tree.Severity;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.OnePixelSplitter;
 import com.intellij.ui.jcef.JBCefClient;
 import com.intellij.ui.jcef.JCEFHtmlPanel;
-import net.sourceforge.pmd.lang.rule.Rule;
-import net.sourceforge.pmd.lang.rule.RulePriority;
-import net.sourceforge.pmd.properties.PropertyDescriptor;
 import org.cef.CefSettings;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
@@ -348,7 +346,7 @@ public class PMDHTMLUtil {
     /**
      * Generates HTML content for displaying rule information or message.
      */
-    public static @NotNull String getHtmlText(@NotNull String message, @Nullable Rule rule) {
+    public static @NotNull String getHtmlText(@NotNull String message, @Nullable RuleInfo rule) {
         StringBuilder htmlBuilder = new StringBuilder();
 
         if (rule == null) {
@@ -358,25 +356,25 @@ public class PMDHTMLUtil {
             // Start with the title and severity on the same line
             htmlBuilder.append("<div class=\"title-severity\">\n");
             htmlBuilder.append("  <div class=\"title\">").append(message).append("</div>\n");
-            RulePriority rulePriority = rule.getPriority();
+            int rulePriority = rule.priority();
             Severity severity = Severity.of(rulePriority);
             String severityName = severity.getName();
             String severityColor = colorToHex(severity.getColor());
 
             htmlBuilder.append("  <div class='severity' style='background-color: ").append(severityColor)
-                .append(";'>").append(rulePriority.getPriority()).append(":").append(severityName).append("</div>\n");
+                .append(";'>").append(rulePriority).append(":").append(severityName).append("</div>\n");
             htmlBuilder.append("</div>");
 
             // Add rule name and tags in badge format
             appendRuleNameAndTagsTo(htmlBuilder, rule);
 
-            String descMd = rule.getDescription();
+            String descMd = rule.description();
             descMd = BRACED_RULES_NAME_PATTERN.matcher(descMd).replaceAll("");
             String descHtml = MdToHtmlConverter.convertToHtml(descMd);
 
             htmlBuilder.append(descHtml);
 
-            String url = rule.getExternalInfoUrl();
+            String url = rule.externalInfoUrl();
             String linkHtml = "";
             if (url != null && !url.isEmpty()) {
                 linkHtml = "<p><a href=\"" + url + "\">Full documentation</a></p>";
@@ -400,12 +398,12 @@ public class PMDHTMLUtil {
     /**
      * Appends rule name and tags to HTML builder.
      */
-    private static void appendRuleNameAndTagsTo(StringBuilder htmlBuilder, @NotNull Rule rule) {
+    private static void appendRuleNameAndTagsTo(StringBuilder htmlBuilder, @NotNull RuleInfo rule) {
         htmlBuilder.append("<div class='rule-id'>");
 
         // Add rule name / ID
-        String ruleName = rule.getName();
-        if (ruleName != null && !ruleName.isEmpty()) {
+        String ruleName = rule.name();
+        if (!ruleName.isEmpty()) {
             htmlBuilder.append("Rule ID: ").append(ruleName).append(" ");
         }
 
@@ -413,18 +411,14 @@ public class PMDHTMLUtil {
         String bgColor = "#808080";
         String textColor = "#E8E8E8";
         // Add tags as badges
-        PropertyDescriptor<?> tagsDescriptor = rule.getPropertyDescriptor("tags");
-        if (tagsDescriptor != null) {
-            Object value = rule.getProperty(tagsDescriptor);
-            if (value != null) {
-                String tagsString = value.toString();
-                String[] tags = tagsString.split(",");
-                for (String tag : tags) {
-                    tag = tag.trim();
-                    if (!tag.isEmpty() && !tag.endsWith("-rule")) {
-                        htmlBuilder.append(" <span class='tag' style='background-color: ").append(bgColor).append("; color: ").append(textColor);
-                        htmlBuilder.append(";'>").append(tag).append("</span> ");
-                    }
+        String tagsString = rule.tags();
+        if (tagsString != null && !tagsString.isEmpty()) {
+            String[] tags = tagsString.split(",");
+            for (String tag : tags) {
+                tag = tag.trim();
+                if (!tag.isEmpty() && !tag.endsWith("-rule")) {
+                    htmlBuilder.append(" <span class='tag' style='background-color: ").append(bgColor).append("; color: ").append(textColor);
+                    htmlBuilder.append(";'>").append(tag).append("</span> ");
                 }
             }
         }

@@ -5,7 +5,7 @@ import com.intellij.plugins.bodhi.pmd.core.PMDProcessingError;
 import com.intellij.plugins.bodhi.pmd.core.PMDSuppressedViolation;
 import com.intellij.plugins.bodhi.pmd.core.PMDUselessSuppression;
 import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
-import net.sourceforge.pmd.lang.rule.Rule;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 
  /**
  * A Factory that creates different types of tree nodes used by PMD plugin.
@@ -46,11 +46,11 @@ public class PMDTreeNodeFactory {
     /**
      * Creates a rule branch tree node object
      *
-     * @param rule the branch node rule
+     * @param ruleInfo the branch node rule metadata
      * @return The created node
      */
-    public PMDRuleNode createRuleNode(Rule rule) {
-        return new PMDRuleNode(rule);
+    public PMDRuleNode createRuleNode(RuleInfo ruleInfo) {
+        return new PMDRuleNode(ruleInfo);
     }
 
     /**

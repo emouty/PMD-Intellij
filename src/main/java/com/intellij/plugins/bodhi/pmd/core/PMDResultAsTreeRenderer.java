@@ -1,7 +1,11 @@
 package com.intellij.plugins.bodhi.pmd.core;
 
 import com.intellij.plugins.bodhi.pmd.tree.*;
+import net.sourceforge.pmd.lang.ast.FileAnalysisException;
+import net.sourceforge.pmd.lang.ast.LexException;
+import net.sourceforge.pmd.lang.document.FileId;
 import net.sourceforge.pmd.lang.rule.Rule;
+import net.sourceforge.pmd.properties.PropertyDescriptor;
 import net.sourceforge.pmd.renderers.AbstractIncrementingRenderer;
 import net.sourceforge.pmd.reporting.Report;
 import net.sourceforge.pmd.reporting.RuleViolation;
@@ -13,10 +17,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static net.sourceforge.pmd.reporting.RuleViolation.CLASS_NAME;
+import static net.sourceforge.pmd.reporting.RuleViolation.METHOD_NAME;
+import static net.sourceforge.pmd.reporting.RuleViolation.PACKAGE_NAME;
 
 /**
- * Represents the renderer for the PMD results in a tree.
- * Only core package classes are coupled with the PMD Library.
+ * Renders PMD results into the plugin's tree model. This is the bridge between PMD's
+ * type system and the plugin's PMD-type-free domain types ({@link RuleInfo},
+ * {@link PMDViolation}, {@link PMDSuppressedViolation}, {@link PMDProcessingError}).
  *
  * @author jborgers
  */
@@ -24,6 +35,8 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
 
     private static final Log log = LogFactory.getLog(PMDResultAsTreeRenderer.class);
     private static final String EXCEPTION_SWALLOWED = "Exception caught and swallowed: ";
+    private static final Pattern LOCATION_PATTERN = Pattern.compile("line (?<line>\\d+), column (?<column>\\d+)");
+
     private final List<PMDRuleSetEntryNode> pmdRuleResultNodes;
     private final PMDErrorBranchNode processingErrorsNode;
     private final UselessSuppressionsHelper uselessSupHelper;
@@ -43,13 +56,13 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
             try {
                 RuleViolation ruleViolation = violations.next();
                 Rule rule = ruleViolation.getRule();
-                RuleKey key = new RuleKey(rule);
+                RuleKey key = new RuleKey(rule.getName(), rule.getPriority().getPriority());
                 PMDRuleNode ruleNode = ruleKeyToNodeMap.get(key);
                 if (ruleNode == null) {
-                    ruleNode = nodeFactory.createRuleNode(rule);
+                    ruleNode = nodeFactory.createRuleNode(toRuleInfo(rule));
                     ruleKeyToNodeMap.put(key, ruleNode);
                 }
-                ruleNode.add(nodeFactory.createViolationLeafNode(new PMDViolation(ruleViolation)));
+                ruleNode.add(nodeFactory.createViolationLeafNode(toPMDViolation(ruleViolation)));
                 uselessSupHelper.storeRuleNameForMethod(ruleViolation);
             }
             catch(Exception e) {
@@ -69,9 +82,10 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
             PMDTreeNodeFactory nodeFactory = PMDTreeNodeFactory.getInstance();
             for (Report.ProcessingError error : errors) {
                 try {
-                    if (!processingErrorsNode.hasFile(error.getFileId().getOriginalPath())) {
-                        processingErrorsNode.add(nodeFactory.createErrorLeafNode(new PMDProcessingError(error)));
-                        processingErrorsNode.registerFile(error.getFileId().getOriginalPath());
+                    String filePath = error.getFileId().getOriginalPath();
+                    if (!processingErrorsNode.hasFile(filePath)) {
+                        processingErrorsNode.add(nodeFactory.createErrorLeafNode(toPMDProcessingError(error)));
+                        processingErrorsNode.registerFile(filePath);
                     }
                 }
                 catch(Exception e) {
@@ -97,9 +111,9 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
             for (Report.SuppressedViolation suppressed : suppressed) {
                 try {
                     if (suppressed.getSuppressor() == ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR) {
-                        suppressedByNoPmdNode.add(nodeFactory.createSuppressedLeafNode(new PMDSuppressedViolation(suppressed)));
+                        suppressedByNoPmdNode.add(nodeFactory.createSuppressedLeafNode(toPMDSuppressedViolation(suppressed)));
                     } else {
-                        suppressedByAnnotationNode.add(nodeFactory.createSuppressedLeafNode(new PMDSuppressedViolation(suppressed)));
+                        suppressedByAnnotationNode.add(nodeFactory.createSuppressedLeafNode(toPMDSuppressedViolation(suppressed)));
                         uselessSupHelper.storeRuleNameForMethod(suppressed);
                     }
                 }
@@ -146,5 +160,95 @@ public class PMDResultAsTreeRenderer extends AbstractIncrementingRenderer {
 
     @Override
     public void flush() {
+    }
+
+    // ----------------------------------------------------------------------
+    // Converters: PMD types → plugin domain types
+    // ----------------------------------------------------------------------
+
+    public static RuleInfo toRuleInfo(Rule rule) {
+        String tags = "";
+        PropertyDescriptor<?> tagsDescriptor = rule.getPropertyDescriptor("tags");
+        if (tagsDescriptor != null) {
+            Object value = rule.getProperty(tagsDescriptor);
+            if (value != null) {
+                tags = value.toString();
+            }
+        }
+        return new RuleInfo(
+                rule.getName(),
+                rule.getMessage() == null ? "" : rule.getMessage(),
+                rule.getDescription() == null ? "" : rule.getDescription(),
+                rule.getExternalInfoUrl(),
+                rule.getPriority().getPriority(),
+                rule.getPriority().getName(),
+                rule.getLanguage().getId(),
+                tags,
+                List.copyOf(rule.getExamples())
+        );
+    }
+
+    public static PMDViolation toPMDViolation(RuleViolation rv) {
+        RuleInfo ri = toRuleInfo(rv.getRule());
+        boolean unknownFile = rv.getFileId() == FileId.UNKNOWN;
+        String filePath = unknownFile ? null : rv.getFileId().getOriginalPath();
+        Map<String, String> info = rv.getAdditionalInfo();
+        return new PMDViolation(
+                filePath,
+                rv.getBeginLine(), rv.getBeginColumn(),
+                rv.getEndLine(), rv.getEndColumn(),
+                rv.getDescription() == null ? "" : rv.getDescription(),
+                ri,
+                info.get(CLASS_NAME),
+                info.get(METHOD_NAME),
+                info.get(PACKAGE_NAME),
+                unknownFile
+        );
+    }
+
+    public static PMDSuppressedViolation toPMDSuppressedViolation(Report.SuppressedViolation sv) {
+        boolean byNOPMD = sv.getSuppressor() == ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR;
+        boolean byAnnotation = "@SuppressWarnings".equals(sv.getSuppressor().getId());
+        return new PMDSuppressedViolation(
+                toPMDViolation(sv.getRuleViolation()),
+                byNOPMD,
+                byAnnotation,
+                sv.getUserMessage()
+        );
+    }
+
+    public static PMDProcessingError toPMDProcessingError(Report.ProcessingError error) {
+        int line = 0;
+        int col = 0;
+        Throwable err = error.getError();
+        if (err instanceof LexException lex) {
+            line = lex.getLine();
+            col = lex.getColumn();
+        } else if (err != null && error.getDetail() != null) {
+            Matcher matcher = LOCATION_PATTERN.matcher(error.getDetail());
+            if (matcher.find()) {
+                line = Integer.parseInt(matcher.group("line"));
+                col = Integer.parseInt(matcher.group("column"));
+            }
+        }
+        String msg;
+        if (err instanceof FileAnalysisException) {
+            msg = error.getMsg();
+        } else if (err != null) {
+            msg = err.getClass().getSimpleName() + ": Error while parsing " + error.getFileId();
+        } else {
+            msg = error.getMsg();
+        }
+        String errMsg = (err == null) ? "" : (err.getMessage() == null ? "" : err.getMessage());
+        String errorClassName = (err == null) ? "" : err.getClass().getSimpleName();
+        return new PMDProcessingError(
+                error.getFileId().getOriginalPath(),
+                msg,
+                errMsg,
+                error.getDetail(),
+                errorClassName,
+                line,
+                col
+        );
     }
 }

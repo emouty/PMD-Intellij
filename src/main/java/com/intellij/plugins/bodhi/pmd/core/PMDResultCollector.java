@@ -61,16 +61,39 @@ public class PMDResultCollector {
 
     public List<PMDRuleSetEntryNode> runPMDAndGetResultsForSingleFileNew(
             PsiFile file,
-            LanguageVersion languageVersion,
+            String languageId,
+            String languageVersionStr,
             String ruleSetPath,
             PMDProjectComponent comp,
             Renderer extraRenderer) {
 
+        LanguageVersion languageVersion = resolveLanguageVersion(languageId, languageVersionStr);
+        if (languageVersion == null) {
+            return List.of();
+        }
         return runPMDAndGetResultsInternal(
                 Map.of(languageVersion, Set.of(file)),
                 ruleSetPath,
                 comp,
                 extraRenderer);
+    }
+
+    /**
+     * Maps a (languageId, versionString) pair to a PMD {@link LanguageVersion}, falling back
+     * to the language's latest version when {@code versionString} is null or unknown.
+     */
+    private static LanguageVersion resolveLanguageVersion(String languageId, String versionString) {
+        Language lang = net.sourceforge.pmd.lang.LanguageRegistry.PMD.getLanguageById(languageId);
+        if (lang == null) {
+            return null;
+        }
+        if (versionString != null && !versionString.isEmpty()) {
+            LanguageVersion v = lang.getVersion(versionString);
+            if (v != null) {
+                return v;
+            }
+        }
+        return lang.getLatestVersion();
     }
 
     public List<PMDRuleSetEntryNode> runPMDAndGetResults(
@@ -83,7 +106,7 @@ public class PMDResultCollector {
         }
 
         return runPMDAndGetResultsInternal(
-                getHighestLanguageVersionAndFiles(groupPsiFilesBySupportedLanguageAndVersion(files)),
+                groupPsiFilesByLanguageVersion(files),
                 ruleSetPath,
                 comp,
                 extraRenderer);
@@ -146,34 +169,42 @@ public class PMDResultCollector {
         return pmdRuleSetResults;
     }
 
-    private Map<Language, Map<LanguageVersion, List<PsiFile>>> groupPsiFilesBySupportedLanguageAndVersion(
-            final List<PsiFile> files) {
+    /**
+     * Groups files by PMD language, picking the highest configured version per language.
+     * Resolution flow per file: {@link ManagedLanguageVersionResolver} → (languageId, version string)
+     * → {@link Language#getVersion(String)}, falling back to {@link Language#getLatestVersion()}.
+     */
+    private Map<LanguageVersion, Set<PsiFile>> groupPsiFilesByLanguageVersion(final List<PsiFile> files) {
         final ManagedLanguageVersionResolver resolver = new ManagedLanguageVersionResolver();
 
-        return files.stream()
-                .collect(Collectors.groupingBy(resolver::resolveLanguage))
-                .entrySet()
-                .stream()
-                .filter(e -> e.getKey().isPresent())
-                .collect(Collectors.groupingBy(e -> e.getKey().orElseThrow().getLanguage(),
-                        Collectors.toMap(e -> e.getKey().orElseThrow(), Map.Entry::getValue)));
-    }
+        Map<String, List<Map.Entry<ManagedLanguageVersionResolver.LanguageAndVersion, PsiFile>>> byLangId = files.stream()
+                .map(f -> resolver.resolveLanguage(f).map(lv -> Map.entry(lv, f)))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .collect(Collectors.groupingBy(e -> e.getKey().languageId()));
 
-    private Map<LanguageVersion, Set<PsiFile>> getHighestLanguageVersionAndFiles(
-            final Map<Language, Map<LanguageVersion, List<PsiFile>>> groupPsiFilesByLanguageAndVersion) {
-        return groupPsiFilesByLanguageAndVersion.entrySet()
-                .stream()
-                .collect(Collectors.toMap(
-                        e -> e.getValue()
-                                .keySet()
-                                .stream()
-                                .max(LanguageVersion::compareTo)
-                                .orElseThrow(),
-                        e -> e.getValue()
-                                .values()
-                                .stream()
-                                .flatMap(Collection::stream)
-                                .collect(Collectors.toSet())));
+        Map<LanguageVersion, Set<PsiFile>> result = new java.util.HashMap<>();
+        for (Map.Entry<String, List<Map.Entry<ManagedLanguageVersionResolver.LanguageAndVersion, PsiFile>>> entry : byLangId.entrySet()) {
+            Language pmdLang = net.sourceforge.pmd.lang.LanguageRegistry.PMD.getLanguageById(entry.getKey());
+            if (pmdLang == null) {
+                continue;
+            }
+            LanguageVersion highest = null;
+            Set<PsiFile> bucket = new java.util.HashSet<>();
+            for (Map.Entry<ManagedLanguageVersionResolver.LanguageAndVersion, PsiFile> e : entry.getValue()) {
+                String v = e.getKey().version();
+                LanguageVersion lv = (v == null || v.isEmpty()) ? pmdLang.getLatestVersion() : pmdLang.getVersion(v);
+                if (lv == null) {
+                    lv = pmdLang.getLatestVersion();
+                }
+                if (highest == null || lv.compareTo(highest) > 0) {
+                    highest = lv;
+                }
+                bucket.add(e.getValue());
+            }
+            result.put(highest, bucket);
+        }
+        return result;
     }
 
     private PMDJsonExportingRenderer addExportRenderer(Map<ConfigOption, String> options) {
