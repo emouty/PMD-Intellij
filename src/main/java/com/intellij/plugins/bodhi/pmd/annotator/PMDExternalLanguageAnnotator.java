@@ -25,6 +25,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -64,12 +65,22 @@ public abstract class PMDExternalLanguageAnnotator extends ExternalAnnotator<Fil
         List<PMDViolation> allViolations = new ArrayList<>();
         for (String ruleSetPath : inEditorAnnotationActiveRuleSets) {
             if (isRuleSetForGivenFile(info, ruleSetPath)) {
-                allViolations.addAll(collector.runPMDAndGetResultsForSingleFileNew(
-                        info.file(),
-                        info.languageId(),
-                        info.languageVersion(),
-                        ruleSetPath,
-                        projectComponent));
+                try {
+                    allViolations.addAll(collector.runPMDAndGetResultsForSingleFileNew(
+                            info.file(),
+                            info.languageId(),
+                            info.languageVersion(),
+                            ruleSetPath,
+                            projectComponent));
+                } catch (CancellationException e) {
+                    throw e; // ProcessCanceledException extends CancellationException; never swallow cancellation
+                } catch (Throwable t) {
+                    // PMD can throw Errors on code being edited (e.g. StackOverflowError from
+                    // JavaResolvers.walkSelf on transiently cyclic type hierarchies).
+                    // Log as warn, not error: Logger.error would raise the plugin error report
+                    // this guard exists to avoid.
+                    logger.warn("PMD failed on " + info.file().getName() + " with ruleset " + ruleSetPath, t);
+                }
             }
         }
 
