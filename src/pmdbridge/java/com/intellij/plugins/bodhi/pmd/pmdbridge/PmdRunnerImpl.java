@@ -65,7 +65,7 @@ public class PmdRunnerImpl implements PmdRunner {
     }
 
     // ------------------------------------------------------------------
-    // PmdRunner — tool window
+    // PmdRunner: tool window
     // ------------------------------------------------------------------
 
     @Override
@@ -84,7 +84,7 @@ public class PmdRunnerImpl implements PmdRunner {
     }
 
     // ------------------------------------------------------------------
-    // PmdRunner — annotator
+    // PmdRunner: annotator
     // ------------------------------------------------------------------
 
     @Override
@@ -104,12 +104,14 @@ public class PmdRunnerImpl implements PmdRunner {
         // the panel needs JCEF) nor overwrite the tool window's last HTML report.
         ClassLoader previousLoader = Thread.currentThread().getContextClassLoader();
         PMDAnnotationRenderer renderer = new PMDAnnotationRenderer();
+        Path reportFile = null;
         try {
             Thread.currentThread().setContextClassLoader(PmdRunnerImpl.class.getClassLoader());
             PMDConfiguration pmdConfig = createPmdConfig(
                     ruleSetPath,
                     comp.getOptionToValue().get(ConfigOption.THREADS),
                     List.of(version));
+            reportFile = pmdConfig.getReportFilePath();
             try (PmdAnalysis pmd = PmdAnalysis.create(pmdConfig)) {
                 pmd.files().addFile(new IDETextFile(version, file));
                 pmd.addRenderers(List.of(renderer));
@@ -117,15 +119,18 @@ public class PmdRunnerImpl implements PmdRunner {
             }
         } catch (Exception e) {
             rethrowIfControlFlow(e);
-            LOG.error("Failed to process", e);
+            // In-editor code is routinely mid-edit or syntactically broken, so PMD exceptions
+            // here are expected noise, not plugin bugs; warn only, never error-report (balloon).
+            LOG.warn("Failed to process", e);
         } finally {
             Thread.currentThread().setContextClassLoader(previousLoader);
+            deleteReportFile(reportFile);
         }
         return renderer.getViolations();
     }
 
     // ------------------------------------------------------------------
-    // PmdRunner — ruleset metadata
+    // PmdRunner: ruleset metadata
     // ------------------------------------------------------------------
 
     @Override
@@ -244,12 +249,14 @@ public class PmdRunnerImpl implements PmdRunner {
         final long startMs = System.currentTimeMillis();
         final List<PMDRuleSetEntryNode> pmdRuleSetResults = new ArrayList<>();
 
+        Path reportFile = null;
         try {
             Thread.currentThread().setContextClassLoader(PmdRunnerImpl.class.getClassLoader());
             PMDConfiguration pmdConfig = createPmdConfig(
                     ruleSetPath,
                     options.get(ConfigOption.THREADS),
                     new ArrayList<>(languageVersionFiles.keySet()));
+            reportFile = pmdConfig.getReportFilePath();
 
             PMDResultAsTreeRenderer treeRenderer = new PMDResultAsTreeRenderer(
                     pmdRuleSetResults,
@@ -284,6 +291,7 @@ public class PmdRunnerImpl implements PmdRunner {
             LOG.error("Failed to process", e);
         } finally {
             Thread.currentThread().setContextClassLoader(previousLoader);
+            deleteReportFile(reportFile);
         }
         LOG.debug("Finished pmd processing, took " + (System.currentTimeMillis() - startMs) + "ms");
 
@@ -321,6 +329,18 @@ public class PmdRunnerImpl implements PmdRunner {
             pmdConfig.setThreads(Integer.parseInt(optionThreads));
         }
         return pmdConfig;
+    }
+
+    /** Removes the throwaway report file from {@link #createPmdConfig}; PMD never deletes it. */
+    private static void deleteReportFile(@Nullable Path reportFile) {
+        if (reportFile == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(reportFile);
+        } catch (IOException e) {
+            LOG.debug("Failed to delete temporary PMD report " + reportFile, e);
+        }
     }
 
     @Nullable
