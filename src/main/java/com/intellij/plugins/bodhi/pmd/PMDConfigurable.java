@@ -52,6 +52,9 @@ public class PMDConfigurable implements Configurable {
     }
 
     public void disposeUIResources() {
+        if (form != null) {
+            form.dispose();
+        }
         form = null;
     }
 

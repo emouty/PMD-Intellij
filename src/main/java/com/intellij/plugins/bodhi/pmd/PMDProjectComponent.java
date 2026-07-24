@@ -64,15 +64,8 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
     }
 
     public void initComponent() {
-
-        ActionGroup actionGroupJava = registerActions("PMDPredefinedJava");
-        if (actionGroupJava != null)
-            ((PreDefinedJavaMenuGroup) actionGroupJava).setComponent(this);
-
-        ActionGroup actionGroupKotlin = registerActions("PMDPredefinedKotlin");
-        if (actionGroupKotlin != null)
-            ((PreDefinedKotlinMenuGroup) actionGroupKotlin).setComponent(this);
-
+        registerActions("PMDPredefinedJava");
+        registerActions("PMDPredefinedKotlin");
         registerActions("PMDCustom");
     }
 

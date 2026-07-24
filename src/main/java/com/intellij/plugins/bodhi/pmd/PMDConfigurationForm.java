@@ -58,6 +58,7 @@ public class PMDConfigurationForm {
     private boolean isModified;
     private final Project project;
     private volatile Map<String, String> validKnownCustomRules;
+    private volatile boolean disposed;
 
     private static final List<String> columnNames = List.of("Option", "Value");
     private static final String STAT_URL_MSG_SUCCESS = "Connection success; will use Statistics URL to export anonymous usage statistics";
@@ -93,6 +94,9 @@ public class PMDConfigurationForm {
 
     private void tryInitActionManager(int attemptCount) {
         ApplicationManager.getApplication().invokeLater(() -> {
+            if (disposed) {
+                return; // form disposed while init was queued — don't repopulate the group
+            }
             try {
                 initializeActionManager();
                 validKnownCustomRules = PMDUtil.getValidKnownCustomRules();
@@ -121,6 +125,18 @@ public class PMDConfigurationForm {
         toolbar.getComponent().setVisible(true);
         buttonPanel.setLayout(new BorderLayout());
         buttonPanel.add(toolbar.getComponent(), BorderLayout.CENTER);
+    }
+
+    /**
+     * Releases everything that outlives this form: the toolbar actions parked in the
+     * application-level "PMDSettingsEdit" group hold {@code this} (and through it the
+     * project), so they must be removed when the settings UI is disposed.
+     */
+    void dispose() {
+        disposed = true;
+        if (ActionManager.getInstance().getAction("PMDSettingsEdit") instanceof DefaultActionGroup group) {
+            group.removeAll();
+        }
     }
 
     /**
