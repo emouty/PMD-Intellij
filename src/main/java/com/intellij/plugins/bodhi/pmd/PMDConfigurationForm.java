@@ -188,7 +188,7 @@ public class PMDConfigurationForm {
         pmdVersionCombo.setModel(new DefaultComboBoxModel<>(new String[]{""}));
         pmdVersionCombo.setPrototypeDisplayValue("7.99.99 [downloaded]");
         pmdVersionCombo.setToolTipText(
-                "Empty = bundled default. Otherwise the requested version is loaded from ~/.m2 or downloaded from Maven Central.");
+                "Empty = bundled default. Otherwise the requested version is loaded from ~/.m2 or downloaded from the Maven mirror declared in ~/.m2/settings.xml, falling back to Maven Central.");
         pmdVersionCombo.setRenderer(SimpleListCellRenderer.create("", this::renderVersionItem));
         row.add(pmdVersionCombo);
         row.add(pmdVersionStatusLabel);

@@ -153,7 +153,7 @@ public final class PmdProjectService implements Disposable {
         java.util.Optional<java.util.List<java.nio.file.Path>> jars =
                 PmdMavenResolver.resolveOrDownload(normalized, indicator);
         if (jars.isEmpty()) {
-            return "PMD " + normalized + " not found in local Maven cache and could not be downloaded from Maven Central";
+            return "PMD " + normalized + " not found in local Maven cache and could not be downloaded from any configured Maven repository";
         }
         // Build the probe outside the lock: resolve/download and the full class-graph load
         // must not block getRunner() callers, the EDT included.
