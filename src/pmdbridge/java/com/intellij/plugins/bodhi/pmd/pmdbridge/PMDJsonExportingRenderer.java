@@ -1,6 +1,7 @@
-package com.intellij.plugins.bodhi.pmd.core;
+package com.intellij.plugins.bodhi.pmd.pmdbridge;
 
 import com.google.gson.stream.JsonWriter;
+import com.intellij.plugins.bodhi.pmd.PMDUtil;
 import net.sourceforge.pmd.PMDVersion;
 import net.sourceforge.pmd.renderers.AbstractIncrementingRenderer;
 import net.sourceforge.pmd.reporting.Report;
@@ -8,19 +9,11 @@ import net.sourceforge.pmd.reporting.RuleViolation;
 import net.sourceforge.pmd.reporting.ViolationSuppressor;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.net.InetAddress;
-import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -36,8 +29,6 @@ import static net.sourceforge.pmd.reporting.RuleViolation.PACKAGE_NAME;
 public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
     private static final String NAME = "json exporter";
     private static final int FORMAT_VERSION = 0;
-    private static final int SOCKET_TIMEOUT = 200; // no response expected, so can be short
-    private static final int CONNECT_TIMEOUT = 200;
     private static final String USER_NAME_HASH = DigestUtils.sha1Hex(System.getProperty("user.name"));
     private static final String HOST_NAME_HASH;
     private static final String SESSION_ID = UUID.randomUUID().toString();
@@ -55,7 +46,6 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
         }
         HOST_NAME_HASH = hash;
     }
-
 
     public PMDJsonExportingRenderer(String url) {
         super(NAME, "JSON format exporter of anonymous pmd results.");
@@ -86,7 +76,6 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
     @Override
     public void renderFileViolations(Iterator<RuleViolation> violations) throws IOException {
         String filename = null;
-
         while (violations.hasNext()) {
             RuleViolation rv = violations.next();
             String nextFilename = determineFileName(rv.getFileId());
@@ -105,7 +94,6 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
             }
             renderSingleViolation(rv);
         }
-
         jsonWriter.endArray(); // violations
         jsonWriter.endObject(); // file object
     }
@@ -127,8 +115,7 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
         int srcRootPos;
         if (rv == null) {
             srcRootPos = sourceRootPos(filename);
-        }
-        else {
+        } else {
             srcRootPos = sourceRootPos(filename, rv.getAdditionalInfo().get(PACKAGE_NAME));
         }
         if (srcRootPos < 0) {
@@ -176,12 +163,13 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
                     }
                     filename = nextFilename;
                     jsonWriter.beginObject();
-
                     String hashRootedPath = pathWithHashRoot(filename, rv);
                     jsonWriter.name("hashRootedPath").value(hashRootedPath);
                     jsonWriter.name("violations").beginArray();
                 }
-                renderSingleViolation(rv, s.getSuppressor() == ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR ? "nopmd" : "annotation", s.getUserMessage());
+                renderSingleViolation(rv,
+                        s.getSuppressor() == ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR ? "nopmd" : "annotation",
+                        s.getUserMessage());
             }
             jsonWriter.endArray(); // violations
             jsonWriter.endObject(); // file object
@@ -192,14 +180,14 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
         jsonWriter.name("processingErrors").beginArray();
         for (Report.ProcessingError error : this.errors) {
             jsonWriter.beginObject();
-            //jsonWriter.name("filename").value(error.getFile());
             String hashRootedPath = pathWithHashRoot(error.getFileId().getOriginalPath(), null);
             jsonWriter.name("hashRootedPath").value(hashRootedPath);
             String msg = error.getMsg();
             int posFile = msg.indexOf(error.getFileId().getOriginalPath());
-            String msgWithoutFile = msg.substring(0, posFile);
+            String msgWithoutFile = posFile >= 0 ? msg.substring(0, posFile) : msg;
             jsonWriter.name("message").value(msgWithoutFile);
-            jsonWriter.name("cause").value(error.getError().getCause().getMessage());
+            Throwable cause = error.getError().getCause();
+            jsonWriter.name("cause").value(cause == null ? null : cause.getMessage());
             jsonWriter.endObject();
         }
         jsonWriter.endArray();
@@ -225,45 +213,6 @@ public class PMDJsonExportingRenderer extends AbstractIncrementingRenderer {
      */
     public String exportJsonData() {
         String content = getWriter().toString();
-        return tryJsonExport(content, exportStatisticsUrl); // we assume it works
-    }
-
-    /**
-     * Try export Json formatted content to specified URL and return error description in case of failure.
-     * @param content the Json formatted content to export
-     * @param url the URL of the endpoint to export to
-     * @return an error message in case of failure, empty String in case of success
-     */
-    public static String tryJsonExport(String content, String url) {
-        String msg = "";
-        HttpPost httpPost = new HttpPost(url);
-        StringEntity contentEntity = new StringEntity(content,
-                ContentType.create("application/json", "UTF-8"));
-            httpPost.setEntity(contentEntity);
-            httpPost.setHeader("Accept", "application/json");
-            httpPost.setHeader("Content-type", "application/json");
-
-            RequestConfig requestConfig = RequestConfig.custom()
-                    .setConnectionRequestTimeout(CONNECT_TIMEOUT).setConnectTimeout(CONNECT_TIMEOUT)
-                    .setSocketTimeout(SOCKET_TIMEOUT).build();
-            try (CloseableHttpClient client = HttpClients.custom().setDefaultRequestConfig(requestConfig).build();
-                 CloseableHttpResponse ignored = client.execute(httpPost)) {
-            } catch (SocketTimeoutException e) {
-            // no-op, expected because no response back
-        }
-        catch (IOException e) {
-            //e.printStackTrace(); - not needed
-            if (e.getCause() != null) {
-                msg = e.getCause().getMessage();
-            }
-            else {
-                msg = e.getMessage();
-            }
-        }
-        if (msg.equals("Connection refused (Connection refused)")) {
-            msg = "Connection refused";
-        }
-        return msg;
+        return PMDUtil.tryJsonExport(content, exportStatisticsUrl);
     }
 }
-

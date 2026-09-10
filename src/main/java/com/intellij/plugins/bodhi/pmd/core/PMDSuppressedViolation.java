@@ -1,25 +1,29 @@
 package com.intellij.plugins.bodhi.pmd.core;
 
 
-import net.sourceforge.pmd.reporting.Report;
-
-import static net.sourceforge.pmd.reporting.ViolationSuppressor.NOPMD_COMMENT_SUPPRESSOR;
-
 /**
- * Represents the suppressed violation node user data. This will be data for leaf
- * nodes of the tree and encapsulates the PMD Report.SuppressedViolation.
- * Only core package classes are coupled with the PMD Library.
+ * Suppressed violation node data. PMD-type-free: built by the renderer side
+ * with primitive flags identifying the suppression kind.
  *
  * @author jborgers
  */
 public class PMDSuppressedViolation implements HasPositionInFile {
 
-    private final Report.SuppressedViolation suppressedViolation;
     private final PMDViolation pmdViolation;
+    private final boolean suppressedByNOPMD;
+    private final boolean suppressedByAnnotation;
+    private final String userMessage;
 
-    public PMDSuppressedViolation(Report.SuppressedViolation suppressed) {
-        this.suppressedViolation = suppressed;
-        this.pmdViolation = new PMDViolation(suppressedViolation.getRuleViolation());
+    public PMDSuppressedViolation(
+            PMDViolation pmdViolation,
+            boolean suppressedByNOPMD,
+            boolean suppressedByAnnotation,
+            String userMessage
+    ) {
+        this.pmdViolation = pmdViolation;
+        this.suppressedByNOPMD = suppressedByNOPMD;
+        this.suppressedByAnnotation = suppressedByAnnotation;
+        this.userMessage = userMessage;
     }
 
     /**
@@ -30,7 +34,7 @@ public class PMDSuppressedViolation implements HasPositionInFile {
      *         NOPMD comment.
      */
     public boolean suppressedByNOPMD() {
-        return suppressedViolation.getSuppressor() == NOPMD_COMMENT_SUPPRESSOR;
+        return suppressedByNOPMD;
     }
 
     /**
@@ -41,7 +45,7 @@ public class PMDSuppressedViolation implements HasPositionInFile {
      *         annotation.
      */
     public boolean suppressedByAnnotation() {
-        return suppressedViolation.getSuppressor().getId().equals("@SuppressWarnings");
+        return suppressedByAnnotation;
     }
 
     /**
@@ -57,7 +61,7 @@ public class PMDSuppressedViolation implements HasPositionInFile {
      * @return the documented reason, the suppressed code line following //NOPMD, or <code>null</code>.
      */
     public String getUserMessage() {
-        return suppressedViolation.getUserMessage();
+        return userMessage;
     }
 
     @Override

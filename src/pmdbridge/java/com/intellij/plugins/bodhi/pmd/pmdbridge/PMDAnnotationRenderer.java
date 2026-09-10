@@ -1,13 +1,21 @@
-package com.intellij.plugins.bodhi.pmd.annotator;
+package com.intellij.plugins.bodhi.pmd.pmdbridge;
 
-import com.intellij.openapi.editor.Document;
+import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
 import net.sourceforge.pmd.lang.document.TextFile;
 import net.sourceforge.pmd.renderers.AbstractRenderer;
 import net.sourceforge.pmd.reporting.Report;
+import net.sourceforge.pmd.reporting.RuleViolation;
 
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * PMD renderer that converts the report into a list of plugin-side {@link PMDViolation}s
+ * usable by the IntelliJ external annotator.
+ */
 class PMDAnnotationRenderer extends AbstractRenderer {
 
-    private Report report;
+    private final List<PMDViolation> violations = new ArrayList<>();
 
     PMDAnnotationRenderer() {
         super("Annotations", "Gathers data for annotating IntelliJ editor");
@@ -24,33 +32,24 @@ class PMDAnnotationRenderer extends AbstractRenderer {
 
     @Override
     public void startFileAnalysis(TextFile dataSource) {
-
     }
 
     @Override
     public void renderFileReport(Report report) {
-        if (this.report == null) {
-            this.report = report;
-        } else {
-            this.report = this.report.union(report);
+        for (RuleViolation rv : report.getViolations()) {
+            violations.add(PMDResultAsTreeRenderer.toPMDViolation(rv));
         }
     }
 
     @Override
-    public void end()  {
+    public void end() {
     }
 
     @Override
     public void flush() {
     }
 
-    public PMDAnnotations getResult(Document document) {
-        if (report == null) {
-            // Return empty annotations
-            // This can happen when no PMD violations are found
-            return new PMDAnnotations(Report.buildReport(listener -> {}
-            ), document);
-        }
-        return new PMDAnnotations(report, document);
+    public List<PMDViolation> getViolations() {
+        return new ArrayList<>(violations);
     }
 }

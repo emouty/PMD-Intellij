@@ -16,39 +16,37 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.plugins.bodhi.pmd.PMDProjectComponent;
 import com.intellij.plugins.bodhi.pmd.annotator.langversion.ManagedLanguageVersionResolver;
 import com.intellij.plugins.bodhi.pmd.core.PMDResultCollector;
+import com.intellij.plugins.bodhi.pmd.core.PMDViolation;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.webSymbols.utils.HtmlMarkdownUtils;
-import net.sourceforge.pmd.lang.Language;
-import net.sourceforge.pmd.lang.LanguageRegistry;
-import net.sourceforge.pmd.lang.rule.Rule;
-import net.sourceforge.pmd.reporting.RuleViolation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Display PMD violations in the editor and in the problem view
+ * Display PMD violations in the editor and in the problem view.
  */
 public abstract class PMDExternalLanguageAnnotator extends ExternalAnnotator<FileInfo, PMDAnnotations> {
 
-    protected final Language language;
+    protected final String languageId;
     protected final Logger logger;
 
     protected PMDExternalLanguageAnnotator(String languageId) {
-        this.language = LanguageRegistry.PMD.getLanguageById(languageId);
+        this.languageId = languageId;
         this.logger = Logger.getInstance(getClass());
     }
 
     @Override
     public FileInfo collectInformation(@NotNull PsiFile file, @NotNull Editor editor, boolean hasErrors) {
-        return new FileInfo(
-                file,
-                editor.getDocument(),
-                new ManagedLanguageVersionResolver().resolveWithLang(language, file));
+        ManagedLanguageVersionResolver.LanguageAndVersion lv =
+                new ManagedLanguageVersionResolver().resolveWithLang(languageId, file);
+        return new FileInfo(file, editor.getDocument(), lv.languageId(), lv.version());
     }
 
     @Override
@@ -64,27 +62,35 @@ public abstract class PMDExternalLanguageAnnotator extends ExternalAnnotator<Fil
         }
 
         PMDResultCollector collector = new PMDResultCollector();
-        PMDAnnotationRenderer renderer = new PMDAnnotationRenderer();
+        List<PMDViolation> allViolations = new ArrayList<>();
         for (String ruleSetPath : inEditorAnnotationActiveRuleSets) {
             if (isRuleSetForGivenFile(info, ruleSetPath)) {
-                collector.runPMDAndGetResultsForSingleFileNew(
-                        info.file(),
-                        info.languageVersion(),
-                        ruleSetPath,
-                        projectComponent,
-                        renderer);
+                try {
+                    allViolations.addAll(collector.runPMDAndGetResultsForSingleFileNew(
+                            info.file(),
+                            info.languageId(),
+                            info.languageVersion(),
+                            ruleSetPath,
+                            projectComponent));
+                } catch (CancellationException e) {
+                    throw e; // ProcessCanceledException extends CancellationException; never swallow cancellation
+                } catch (Throwable t) {
+                    // PMD can throw Errors on code being edited (e.g. StackOverflowError from
+                    // JavaResolvers.walkSelf on transiently cyclic type hierarchies).
+                    // Log as warn, not error: Logger.error would raise the plugin error report
+                    // this guard exists to avoid.
+                    logger.warn("PMD failed on " + info.file().getName() + " with ruleset " + ruleSetPath, t);
+                }
             }
         }
 
-        return renderer.getResult(info.document());
+        return new PMDAnnotations(allViolations, info.document());
     }
 
     private static boolean isRuleSetForGivenFile(FileInfo info, String ruleSetPath) {
-        // This is a very basic check to see if RuleSet applies to the file:
-        // it assumes the language id (e.g. "java" or "kotlin") is exclusively part of rule set path
-        // (e.g. /category/java/bestpractices.xml or /home/user/jpinpoint-java-rules.xml).
-        // This can fail if for (unexpected?) paths like: /home/user/kotlin/jpinpoint-java-rules.xml
-        return ruleSetPath.contains(info.languageVersion().getLanguage().getId());
+        // Very basic check assuming language id (e.g. "java" or "kotlin") is exclusively part
+        // of the rule set path. Can fail for unexpected paths like /home/user/kotlin/jpinpoint-java-rules.xml.
+        return ruleSetPath.contains(info.languageId());
     }
 
     @Override
@@ -93,50 +99,50 @@ public abstract class PMDExternalLanguageAnnotator extends ExternalAnnotator<Fil
             return;
         }
 
-        final List<RuleViolation> violations = annotationResult.report().getViolations();
-        if(violations.isEmpty()) {
+        final List<PMDViolation> violations = annotationResult.violations();
+        if (violations.isEmpty()) {
             return;
         }
 
         final InspectionManager inspectionManager = InspectionManager.getInstance(file.getProject());
 
         Document document = annotationResult.document();
-        for (RuleViolation violation : violations) {
-            int startLineOffset = document.getLineStartOffset(violation.getBeginLine()-1);
+        for (PMDViolation violation : violations) {
+            int startLineOffset = document.getLineStartOffset(violation.getBeginLine() - 1);
             int endOffset = violation.getEndLine() - violation.getBeginLine() > 5 // Only mark first line for long violations
-                    ? document.getLineEndOffset(violation.getBeginLine()-1)
-                    : document.getLineStartOffset(violation.getEndLine()-1) + violation.getEndColumn();
+                    ? document.getLineEndOffset(violation.getBeginLine() - 1)
+                    : document.getLineStartOffset(violation.getEndLine() - 1) + violation.getEndColumn();
 
             final int startOffset = startLineOffset + violation.getBeginColumn() - 1;
             final PsiElement psiElement = file.findElementAt(startOffset);
 
             try {
-                final Rule rule = violation.getRule();
+                final RuleInfo rule = violation.getRuleInfo();
                 final TextRange range = TextRange.create(startOffset, endOffset);
 
                 final String pmdSuffix = "PMD: ";
 
                 AnnotationBuilder annotationBuilder = holder.newAnnotation(
-                        getSeverity(violation),
-                        pmdSuffix + violation.getDescription())
-                        .tooltip(pmdSuffix + rule.getName() +
+                                getSeverity(violation),
+                                pmdSuffix + violation.getDescription())
+                        .tooltip(pmdSuffix + rule.name() +
                                 "<p>" +
                                 violation.getDescription() +
                                 "</p>" +
                                 "<p>" + DocMarkdownToHtmlConverter.convert(
                                         DefaultProjectFactory.getInstance().getDefaultProject(),
-                                        rule.getDescription())
+                                        rule.description())
                                 + "</p>")
                         .range(range)
                         .needsUpdateOnTyping(true);
 
-                if(psiElement != null) {
-                    final SuppressFix suppressFix = new SuppressFix("PMD." + rule.getName());
+                if (psiElement != null) {
+                    final SuppressFix suppressFix = new SuppressFix("PMD." + rule.name());
                     annotationBuilder = annotationBuilder.newLocalQuickFix(
                                     suppressFix,
                                     inspectionManager.createProblemDescriptor(
                                             psiElement,
-                                            pmdSuffix + rule.getName(),
+                                            pmdSuffix + rule.name(),
                                             suppressFix,
                                             getProblemHighlightType(violation),
                                             false))
@@ -147,28 +153,29 @@ public abstract class PMDExternalLanguageAnnotator extends ExternalAnnotator<Fil
                 annotationBuilder
                         .withFix(new SupressIntentionAction(violation))
                         .create();
-            } catch(IllegalArgumentException e) {
+            } catch (IllegalArgumentException e) {
                 // Catching "Invalid range specified" from TextRange.create thrown when file has been updated while analyzing
                 logger.warn("Error while annotating file with PMD warnings", e);
             }
         }
     }
 
-    private static HighlightSeverity getSeverity(RuleViolation violation) {
-        return switch (violation.getRule().getPriority()) {
-            case HIGH -> HighlightSeverity.ERROR;
-            case MEDIUM_HIGH, MEDIUM -> HighlightSeverity.WARNING;
-            case MEDIUM_LOW -> HighlightSeverity.WEAK_WARNING;
-            case LOW -> HighlightSeverity.INFORMATION;
+    private static HighlightSeverity getSeverity(PMDViolation violation) {
+        // PMD priority: 1=HIGH, 2=MEDIUM_HIGH, 3=MEDIUM, 4=MEDIUM_LOW, 5=LOW
+        return switch (violation.getRulePriority()) {
+            case 1 -> HighlightSeverity.ERROR;
+            case 2, 3 -> HighlightSeverity.WARNING;
+            case 4 -> HighlightSeverity.WEAK_WARNING;
+            default -> HighlightSeverity.INFORMATION;
         };
     }
 
-    private static ProblemHighlightType getProblemHighlightType(RuleViolation violation) {
-        return switch (violation.getRule().getPriority()) {
-            case HIGH -> ProblemHighlightType.ERROR;
-            case MEDIUM_HIGH, MEDIUM -> ProblemHighlightType.WARNING;
-            case MEDIUM_LOW -> ProblemHighlightType.WEAK_WARNING;
-            case LOW -> ProblemHighlightType.INFORMATION;
+    private static ProblemHighlightType getProblemHighlightType(PMDViolation violation) {
+        return switch (violation.getRulePriority()) {
+            case 1 -> ProblemHighlightType.ERROR;
+            case 2, 3 -> ProblemHighlightType.WARNING;
+            case 4 -> ProblemHighlightType.WEAK_WARNING;
+            default -> ProblemHighlightType.INFORMATION;
         };
     }
 }

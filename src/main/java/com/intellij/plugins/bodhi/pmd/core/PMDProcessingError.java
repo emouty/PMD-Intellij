@@ -1,41 +1,47 @@
 package com.intellij.plugins.bodhi.pmd.core;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import net.sourceforge.pmd.lang.ast.FileAnalysisException;
-import net.sourceforge.pmd.lang.ast.LexException;
-import net.sourceforge.pmd.reporting.Report;
 
 /**
- * Represents the actual error node user data. This will be data for leaf
- * nodes of the tree and encapsulates the PMD Report.ProcessingError.
- * Only core package classes are coupled with the PMD Library.
+ * Processing error node data. PMD-type-free: built from primitive strings by the renderer side
+ * (which has access to PMD's Throwable + Report.ProcessingError).
  *
  * @author jborgers
  */
 public class PMDProcessingError implements HasPositionInFile {
 
-    private final Report.ProcessingError processingError;
-    private int beginLine = 0;
-    private int beginColumn = 0;
+    private final String filePath;
+    /** Rendered message shown in the tree. */
+    private final String msg;
+    /** The throwable's own detail message (may be empty). */
+    private final String errorMsg;
+    /** PMD's error detail: the stacktrace text including the cause, if any. */
+    private final String causeMsg;
+    private final String errorClassName;
+    private final int beginLine;
+    private final int beginColumn;
     private final String positionText;
 
-    private static final Pattern LOCATION_PATTERN = Pattern.compile("line (?<line>\\d+), column (?<column>\\d+)");
+    public PMDProcessingError(
+            String filePath,
+            String msg,
+            String errorMsg,
+            String causeMsg,
+            String errorClassName,
+            int beginLine,
+            int beginColumn
+    ) {
+        this.filePath = filePath;
+        this.msg = msg;
+        this.errorMsg = errorMsg;
+        this.causeMsg = causeMsg;
+        this.errorClassName = errorClassName;
+        this.beginLine = beginLine;
+        this.beginColumn = beginColumn;
+        this.positionText = "(" + beginLine + ", " + beginColumn + ") ";
+    }
 
-    public PMDProcessingError(Report.ProcessingError error) {
-        processingError = error;
-        if (error.getError() instanceof LexException) {
-            beginLine = ((LexException) error.getError()).getLine();
-            beginColumn = ((LexException) error.getError()).getColumn();
-        } else if (error.getError() != null) {
-            Matcher matcher = LOCATION_PATTERN.matcher(error.getDetail());
-            if (matcher.find()) {
-                beginLine = Integer.parseInt(matcher.group("line"));
-                beginColumn = Integer.parseInt(matcher.group("column"));
-            }
-        }
-        positionText = "(" + beginLine + ", " + beginColumn + ") ";
+    public String getErrorClassName() {
+        return errorClassName;
     }
 
     /**
@@ -43,13 +49,7 @@ public class PMDProcessingError implements HasPositionInFile {
      * @return the simple class name and the throwable detail message.
      */
     public String getMsg() {
-        Throwable error = processingError.getError();
-        if (error instanceof FileAnalysisException) {
-            // a proper PMDException indicating for instance wrong java version
-            return processingError.getMsg();
-        }
-        // error in PMD, for instance a NullPointerException, build our own message
-        return error.getClass().getSimpleName() + ": Error while parsing " + processingError.getFileId();
+        return msg;
     }
 
     /**
@@ -59,15 +59,7 @@ public class PMDProcessingError implements HasPositionInFile {
      *          (which may be {@code null}).
      */
     public String getErrorMsg() {
-        return processingError.getError().getMessage();
-    }
-
-    /**
-     * Returns the Throwable.
-     * @return the Throwable.
-     */
-    public Throwable getError() {
-        return processingError.getError();
+        return errorMsg;
     }
 
     /**
@@ -76,7 +68,7 @@ public class PMDProcessingError implements HasPositionInFile {
      * @return the detail message of throwable.
      */
     public String getCauseMsg() {
-        return processingError.getDetail();
+        return causeMsg;
     }
 
     /**
@@ -93,7 +85,7 @@ public class PMDProcessingError implements HasPositionInFile {
      */
     @Override
     public String getFilePath() {
-        return processingError.getFileId().getOriginalPath();
+        return filePath;
     }
 
     @Override

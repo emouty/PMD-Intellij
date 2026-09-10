@@ -14,10 +14,19 @@ import com.intellij.plugins.bodhi.pmd.core.PMDResultCollector;
 import com.intellij.util.containers.OrderedSet;
 import org.jetbrains.annotations.NotNull;
 
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -42,7 +51,12 @@ public class PMDUtil {
     private static final Map<String, String> KNOWN_CUSTOM_RULES = Map.of(
             "jpinpoint-java-rules", JPINPOINT_JAVA_RULES,
             "jpinpoint-kotlin-rules", JPINPOINT_KOTLIN_RULES);
-    private static volatile Map<String, String> validCustomRules; // lazy initialized
+    /**
+     * Validation results depend on the project's active PMD version, so the cache is keyed
+     * per project (weakly, so it doesn't outlive the project) rather than shared app-wide.
+     */
+    private static final Map<Project, Map<String, String>> VALID_CUSTOM_RULES =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Not to be instantiated
@@ -50,15 +64,20 @@ public class PMDUtil {
     private PMDUtil() {}
 
     /**
-     * Returns the valid known custom rules
-     * @return the valid known custom rules
+     * Returns the valid known custom rules.
+     *
+     * <p>Validation requires a {@link Project} because rule-set loading is delegated to
+     * the per-project {@link com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService}.
      */
-    public static Map<String, String> getValidKnownCustomRules() {
-        if (validCustomRules == null) {
-            validCustomRules = KNOWN_CUSTOM_RULES.entrySet().stream().filter(e -> PMDResultCollector.isValidRuleSet(e.getValue()).isEmpty())
-                    .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-        return validCustomRules;
+    public static Map<String, String> getValidKnownCustomRules(@org.jetbrains.annotations.NotNull Project project) {
+        return VALID_CUSTOM_RULES.computeIfAbsent(project, p -> KNOWN_CUSTOM_RULES.entrySet().stream()
+                .filter(e -> PMDResultCollector.isValidRuleSet(p, e.getValue()).isEmpty())
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue)));
+    }
+
+    /** Drops the project's validated-rules cache so it re-validates against the newly active PMD version. */
+    public static void invalidateValidCustomRules(@org.jetbrains.annotations.NotNull Project project) {
+        VALID_CUSTOM_RULES.remove(project);
     }
 
     /**
@@ -288,12 +307,98 @@ public class PMDUtil {
 
     public static @NotNull List<String> loadRules(String rulesetsPropertyFile) {
         Properties props = new Properties();
-        try {
-            props.load(PMDUtil.class.getClassLoader().getResourceAsStream(rulesetsPropertyFile));
+        try (java.io.InputStream is = bundledPmdResource(rulesetsPropertyFile)) {
+            if (is == null) {
+                throw new IOException("Resource not found in bundled PMD JARs: " + rulesetsPropertyFile);
+            }
+            props.load(is);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load rule set property file: " + rulesetsPropertyFile, e);
         }
         return new ArrayList<>(List.of(props.getProperty(RULESETS_FILENAMES_KEY).split(PMDInvoker.RULE_DELIMITER)));
     }
 
+    /**
+     * Lazy classloader spanning the bundled default PMD JARs, used to read PMD-resident
+     * resources (predefined rule category property files) when no Project is available
+     * yet (e.g. when the action system constructs {@code PreDefinedAbstractClass} at
+     * IDE startup.
+     */
+    private static volatile ClassLoader BUNDLED_PMD_RESOURCE_LOADER;
+
+    private static java.io.InputStream bundledPmdResource(String name) {
+        ClassLoader cl = BUNDLED_PMD_RESOURCE_LOADER;
+        if (cl == null) {
+            synchronized (PMDUtil.class) {
+                cl = BUNDLED_PMD_RESOURCE_LOADER;
+                if (cl == null) {
+                    cl = createBundledPmdResourceLoader();
+                    BUNDLED_PMD_RESOURCE_LOADER = cl;
+                }
+            }
+        }
+        return cl.getResourceAsStream(name);
+    }
+
+    private static ClassLoader createBundledPmdResourceLoader() {
+        try {
+            com.intellij.ide.plugins.IdeaPluginDescriptor descriptor =
+                    com.intellij.ide.plugins.PluginManagerCore.getPlugin(com.intellij.openapi.extensions.PluginId.getId("PMDPlugin"));
+            if (descriptor == null) {
+                return PMDUtil.class.getClassLoader();
+            }
+            java.nio.file.Path pluginRoot = descriptor.getPluginPath();
+            java.nio.file.Path libDefault = pluginRoot.resolve("pmd").resolve("lib").resolve("default");
+            if (!java.nio.file.Files.isDirectory(libDefault)) {
+                return PMDUtil.class.getClassLoader();
+            }
+            java.util.List<java.net.URL> urls = new java.util.ArrayList<>();
+            try (java.nio.file.DirectoryStream<java.nio.file.Path> stream =
+                         java.nio.file.Files.newDirectoryStream(libDefault, "*.jar")) {
+                for (java.nio.file.Path p : stream) {
+                    urls.add(p.toUri().toURL());
+                }
+            }
+            return new java.net.URLClassLoader(urls.toArray(new java.net.URL[0]), PMDUtil.class.getClassLoader());
+        } catch (Exception e) {
+            return PMDUtil.class.getClassLoader();
+        }
+    }
+
+    private static final int STAT_SOCKET_TIMEOUT = 200;
+    private static final int STAT_CONNECT_TIMEOUT = 200;
+
+    /**
+     * Posts {@code content} as JSON to {@code url} with short timeouts; used by the settings UI
+     * to verify the statistics endpoint is reachable and by {@code PMDJsonExportingRenderer} for
+     * the actual export. Returns an empty string on success (or expected socket timeout because
+     * no response is sent back), or the failure message.
+     */
+    public static String tryJsonExport(String content, String url) {
+        String msg = "";
+        HttpPost httpPost = new HttpPost(url);
+        StringEntity contentEntity = new StringEntity(content,
+                ContentType.create("application/json", "UTF-8"));
+        httpPost.setEntity(contentEntity);
+        httpPost.setHeader("Accept", "application/json");
+        httpPost.setHeader("Content-type", "application/json");
+
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectionRequestTimeout(STAT_CONNECT_TIMEOUT)
+                .setConnectTimeout(STAT_CONNECT_TIMEOUT)
+                .setSocketTimeout(STAT_SOCKET_TIMEOUT)
+                .build();
+        try (CloseableHttpClient client = HttpClients.custom().setDefaultRequestConfig(requestConfig).build();
+             CloseableHttpResponse ignored = client.execute(httpPost)) {
+            // no-op
+        } catch (SocketTimeoutException e) {
+            // expected; no response back
+        } catch (IOException e) {
+            msg = (e.getCause() != null) ? e.getCause().getMessage() : e.getMessage();
+        }
+        if ("Connection refused (Connection refused)".equals(msg)) {
+            msg = "Connection refused";
+        }
+        return msg;
+    }
 }

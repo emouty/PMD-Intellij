@@ -1,43 +1,42 @@
 package com.intellij.plugins.bodhi.pmd.tree;
 
 import com.intellij.plugins.bodhi.pmd.core.HasRule;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 import com.intellij.plugins.bodhi.pmd.core.RuleKey;
-import net.sourceforge.pmd.lang.rule.Rule;
-import net.sourceforge.pmd.lang.rule.RulePriority;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
 
 /**
- * PMD branch tree node for rules. It has a Severity icon based on rule priority and is sortable based on first priority and then name.
+ * Branch tree node for a PMD rule. Sortable by priority then name.
  *
  * @author jborgers
  */
 public class PMDRuleNode extends PMDRuleSetEntryNode implements HasRule {
 
-    private final RulePriority priority;
+    private final int priority;
     private final RuleKey ruleKey;
-    private final Rule rule;
+    private final RuleInfo ruleInfo;
 
     /**
      * Create a node with the given value as rule
      *
-     * @param rule    The PMD rule to set.
+     * @param ruleInfo    The PMD rule to set.
      */
-    public PMDRuleNode(Rule rule) {
-        super(rule.getName());
-        this.rule = rule;
-        priority = rule.getPriority();
-        this.ruleKey = new RuleKey(rule);
+    public PMDRuleNode(@NotNull RuleInfo ruleInfo) {
+        super(ruleInfo.name());
+        this.ruleInfo = ruleInfo;
+        this.priority = ruleInfo.priority();
+        this.ruleKey = new RuleKey(ruleInfo.name(), ruleInfo.priority());
     }
 
     @Override
-    public Rule getRule() {
-        return rule;
+    public RuleInfo getRuleInfo() {
+        return ruleInfo;
     }
 
     public String getRuleExternalInfoUrl() {
-        return rule.getExternalInfoUrl();
+        return ruleInfo.externalInfoUrl();
     }
 
     @Override

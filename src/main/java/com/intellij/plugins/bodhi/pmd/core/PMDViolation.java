@@ -1,89 +1,108 @@
 package com.intellij.plugins.bodhi.pmd.core;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import net.sourceforge.pmd.lang.document.FileId;
-import net.sourceforge.pmd.lang.rule.Rule;
-import net.sourceforge.pmd.lang.rule.RulePriority;
-import net.sourceforge.pmd.reporting.RuleViolation;
-
-import static net.sourceforge.pmd.reporting.RuleViolation.*;
+import java.nio.file.Paths;
 
 /**
- * Represents the actual violation node user data. This will be data for leaf
- * nodes of the tree and encapsulates the PMD RuleViolation.
- * Only this and PMDResultCollector classes (in core package) are coupled
- * with the PMD Library.
+ * Violation node data. PMD-type-free: built from primitives by the renderer side
+ * (which has PMD access) and consumed by the tree/UI layer (which does not).
  *
  * @author bodhi
- * @version 1.2
+ * @author jborgers
+ * @version 2.0
  */
 public class PMDViolation implements HasPositionInFile, HasRule, HasMessage {
 
-    private final RuleViolation ruleViolation;
+    private final String filePath;
+    private final int beginLine;
+    private final int beginColumn;
+    private final int endLine;
+    private final int endColumn;
+    private final String description;
+    private final RuleInfo ruleInfo;
+    private final String className;
+    private final String methodName;
+    private final String packageName;
     private final String positionText;
     private final String classAndMethodMsg;
     private final String packageMsg;
 
-    /**
-     * Creates a PMDViolation which wraps the IRuleViolation given.
-     *
-     * @param violation the violation
-     */
-    public PMDViolation(RuleViolation violation) {
-        this.ruleViolation = violation;
-        this.positionText = "(" + violation.getBeginLine() + ", " + violation.getBeginColumn() + ") ";
-        // seems the file can be unknown in some cases (for kotlin?)
-        boolean unknownFile = violation.getFileId() == FileId.UNKNOWN;
-        String fileName = violation.getFileId().getFileName();
-        String className = violation.getAdditionalInfo().get(CLASS_NAME);
-        if (className == null || className.isEmpty()) {
-            if (unknownFile) {
-                className = "(unknown)";
+    public PMDViolation(
+            @Nullable String filePath,
+            int beginLine,
+            int beginColumn,
+            int endLine,
+            int endColumn,
+            @NotNull String description,
+            @NotNull RuleInfo ruleInfo,
+            @Nullable String className,
+            @Nullable String methodName,
+            @Nullable String packageName,
+            boolean unknownFile
+    ) {
+        this.filePath = filePath;
+        this.beginLine = beginLine;
+        this.beginColumn = beginColumn;
+        this.endLine = endLine;
+        this.endColumn = endColumn;
+        this.description = description;
+        this.ruleInfo = ruleInfo;
+        this.positionText = "(" + beginLine + ", " + beginColumn + ") ";
+
+        String resolvedClassName = className;
+        if (resolvedClassName == null || resolvedClassName.isEmpty()) {
+            if (unknownFile || filePath == null) {
+                resolvedClassName = "(unknown)";
             } else {
-                className = fileName.substring(0, fileName.lastIndexOf('.'));
+                String fileName = Paths.get(filePath).getFileName().toString();
+                int dot = fileName.lastIndexOf('.');
+                resolvedClassName = (dot >= 0) ? fileName.substring(0, dot) : fileName;
             }
         }
-        String methodName = violation.getAdditionalInfo().get(METHOD_NAME);
-        if (methodName == null) {
-            methodName = "";
-        }
-        if (!methodName.isEmpty()) {
-            methodName = "." + methodName + "()";
-        }
-        String packageName = violation.getAdditionalInfo().get(PACKAGE_NAME);
-        this.packageMsg = (packageName != null && !packageName.trim().isEmpty()) ? (" in " + packageName) : "";
-        this.classAndMethodMsg = className + methodName;
+        String resolvedMethodName = (methodName == null) ? "" : methodName;
+        this.className = resolvedClassName;
+        this.methodName = resolvedMethodName;
+        this.packageName = packageName;
+
+        String methodSuffix = resolvedMethodName.isEmpty() ? "" : "." + resolvedMethodName + "()";
+        this.classAndMethodMsg = resolvedClassName + methodSuffix;
+        this.packageMsg = (packageName != null && !packageName.trim().isEmpty())
+                ? (" in " + packageName)
+                : "";
     }
 
     @Override
     public String getFilePath() {
-        return ruleViolation.getFileId().getOriginalPath();
+        return filePath;
     }
 
     @Override
     public int getBeginLine() {
-        return ruleViolation.getBeginLine();
+        return beginLine;
     }
 
     @Override
     public int getBeginColumn() {
-        return ruleViolation.getBeginColumn();
+        return beginColumn;
     }
 
     public int getEndLine() {
-        return ruleViolation.getEndLine();
+        return endLine;
     }
 
     public int getEndColumn() {
-        return ruleViolation.getEndColumn();
+        return endColumn;
     }
 
-    public Rule getRule() {
-        return ruleViolation.getRule();
+    @Override
+    public RuleInfo getRuleInfo() {
+        return ruleInfo;
     }
 
     public String getDescription() {
-        return ruleViolation.getDescription();
+        return description;
     }
 
     @Override
@@ -92,15 +111,15 @@ public class PMDViolation implements HasPositionInFile, HasRule, HasMessage {
     }
 
     public String getPackageName() {
-        return ruleViolation.getAdditionalInfo().get(PACKAGE_NAME);
+        return packageName;
     }
 
     public String getMethodName() {
-        return ruleViolation.getAdditionalInfo().get(METHOD_NAME);
+        return methodName;
     }
 
     public String getClassName() {
-        return ruleViolation.getAdditionalInfo().get(CLASS_NAME);
+        return className;
     }
 
     public String getPositionText() {
@@ -108,7 +127,7 @@ public class PMDViolation implements HasPositionInFile, HasRule, HasMessage {
     }
 
     public String getExternalUrl() {
-        return getRule().getExternalInfoUrl();
+        return ruleInfo.externalInfoUrl();
     }
 
     public String getClassAndMethodMsg() {
@@ -124,18 +143,19 @@ public class PMDViolation implements HasPositionInFile, HasRule, HasMessage {
     }
 
     public String getRuleName() {
-        return getRule().getName();
+        return ruleInfo.name();
     }
 
     public String getRulePriorityName() {
-        return getRule().getPriority().getName();
+        return ruleInfo.priorityName();
+    }
+
+    public int getRulePriority() {
+        return ruleInfo.priority();
     }
 
     public String toString() {
-        return getPackageName() + "." + getClassName() + "." + getMethodName() + " at (" + getBeginLine() + "," + getBeginColumn() + ")";
-    }
-
-    public RulePriority getRulePriority() {
-        return getRule().getPriority();
+        return getPackageName() + "." + getClassName() + "." + getMethodName()
+                + " at (" + getBeginLine() + "," + getBeginColumn() + ")";
     }
 }

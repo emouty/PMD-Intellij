@@ -11,8 +11,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.plugins.bodhi.pmd.actions.PMDCustom;
-import com.intellij.plugins.bodhi.pmd.actions.PreDefinedJavaMenuGroup;
-import com.intellij.plugins.bodhi.pmd.actions.PreDefinedKotlinMenuGroup;
 import com.intellij.plugins.bodhi.pmd.core.PMDResultCollector;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -64,19 +62,12 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
     }
 
     public void initComponent() {
-
-        ActionGroup actionGroupJava = registerActions("PMDPredefinedJava");
-        if (actionGroupJava != null)
-            ((PreDefinedJavaMenuGroup) actionGroupJava).setComponent(this);
-
-        ActionGroup actionGroupKotlin = registerActions("PMDPredefinedKotlin");
-        if (actionGroupKotlin != null)
-            ((PreDefinedKotlinMenuGroup) actionGroupKotlin).setComponent(this);
-
+        registerActions("PMDPredefinedJava");
+        registerActions("PMDPredefinedKotlin");
         registerActions("PMDCustom");
     }
 
-    private ActionGroup registerActions(String actionName) {
+    private void registerActions(String actionName) {
         ActionManager actionMgr = ActionManager.getInstance();
         DefaultActionGroup actionGroup = (DefaultActionGroup) actionMgr.getAction(actionName);
         if (actionGroup != null) {
@@ -86,7 +77,6 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
                     actionMgr.registerAction(actName, act);
             }
         }
-        return actionGroup;
     }
 
     private boolean hasDuplicateBareFileName(Iterable<String> paths)    {
@@ -110,7 +100,7 @@ public final class PMDProjectComponent implements PersistentStateComponent<Persi
         List<AnAction> actions = new ArrayList<>();
         boolean hasDuplicate = hasDuplicateBareFileName(customRuleSetPaths);
         for (final String ruleSetPath : customRuleSetPaths) {
-            String ruleSetName = PMDResultCollector.getRuleSetName(ruleSetPath);
+            String ruleSetName = PMDResultCollector.getRuleSetName(currentProject, ruleSetPath);
             String extFileName = PMDUtil.getExtendedFileNameFromPath(ruleSetPath);
             String bareFileName = PMDUtil.getBareFileNameFromPath(ruleSetPath);
             String actionText = ruleSetName;
