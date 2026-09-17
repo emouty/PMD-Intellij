@@ -38,8 +38,7 @@
     <toolWindow id="PMD"
                 factoryClass="com.intellij.plugins.bodhi.pmd.PMDToolWindowFactory"
                 anchor="bottom"
-                icon="com.intellij.plugins.bodhi.pmd.tree.PMDIcons.PMD"
-                canCloseContents="true"/>
+                icon="com.intellij.plugins.bodhi.pmd.tree.PMDIcons.PMD"/>
     <externalAnnotator
             language="JAVA"
             implementationClass="com.intellij.plugins.bodhi.pmd.annotator.PMDExternalJavaAnnotator"/>
@@ -50,7 +49,12 @@
     <postStartupActivity implementation="com.intellij.plugins.bodhi.pmd.PMDProjectActivity"/>
     <postStartupActivity implementation="com.intellij.plugins.bodhi.pmd.PMDProjectSwitchListener"/>
     <applicationService serviceImplementation="com.intellij.plugins.bodhi.pmd.annotator.langversion.LanguageVersionResolverService"/>
+    <projectService serviceImplementation="com.intellij.plugins.bodhi.pmd.pmd.PmdProjectService"/>
   </extensions>
+  <projectListeners>
+    <listener class="com.intellij.plugins.bodhi.pmd.pmd.PmdVersionChangeHandler"
+              topic="com.intellij.plugins.bodhi.pmd.pmd.PmdVersionListener"/>
+  </projectListeners>
   <!-- Not detected when inside plugin-kotlin.xml -->
   <extensions defaultExtensionNs="org.jetbrains.kotlin">
     <supportsKotlinPluginMode supportsK2="true" />

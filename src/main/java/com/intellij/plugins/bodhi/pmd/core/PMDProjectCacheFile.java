@@ -22,6 +22,11 @@ public final class PMDProjectCacheFile {
         });
     }
 
+    /** Forgets the project's cache file so the next analysis starts a fresh one (e.g. after a PMD version swap). */
+    public static void invalidate(Project project) {
+        CACHE.remove(project);
+    }
+
     private PMDProjectCacheFile() {
     }
 }

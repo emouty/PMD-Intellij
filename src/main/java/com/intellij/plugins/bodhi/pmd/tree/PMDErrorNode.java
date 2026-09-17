@@ -36,7 +36,7 @@ public class PMDErrorNode extends PMDLeafNode implements HasMessage {
         // Show error position greyed, like idea shows.
         cellRenderer.append(pmdProcessingError.getPositionText(), GRAYED_ATTRIBUTES);
         cellRenderer.append(Path.of(pmdProcessingError.getFilePath()).getFileName().toString());
-        cellRenderer.append(" " + pmdProcessingError.getError().getClass().getSimpleName(), GRAYED_ATTRIBUTES);
+        cellRenderer.append(" " + pmdProcessingError.getErrorClassName(), GRAYED_ATTRIBUTES);
     }
 
     @Override

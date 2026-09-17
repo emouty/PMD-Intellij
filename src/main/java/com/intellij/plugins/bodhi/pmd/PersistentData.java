@@ -12,12 +12,22 @@ public class PersistentData {
     private boolean skipTestSources = DEFAULT_SKIP_TEST_SRC;
     private boolean scanFilesBeforeCheckin;
     private List<String> inEditorAnnotationRules;
+    /** PMD version pinned by the user (e.g. {@code "7.3.0"}). {@code null} or empty = bundled default. */
+    private String pmdVersion;
 
 
     public PersistentData() {
         this.customRuleSets = new ArrayList<>();
         this.inEditorAnnotationRules = new ArrayList<>();
         this.optionKeyToValue = new HashMap<>();
+    }
+
+    public String getPmdVersion() {
+        return pmdVersion;
+    }
+
+    public void setPmdVersion(String pmdVersion) {
+        this.pmdVersion = pmdVersion;
     }
 
     public List<String> getCustomRuleSets() {

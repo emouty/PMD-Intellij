@@ -22,8 +22,6 @@ import java.util.*;
  */
 public abstract class PreDefinedAbstractClass extends DefaultActionGroup {
 
-    private PMDProjectComponent component;
-
     /**
      * Loads all the predefined rulesets in PMD and create actions for them.
      */
@@ -38,7 +36,7 @@ public abstract class PreDefinedAbstractClass extends DefaultActionGroup {
                 AnAction ruleAction = new AnAction(ruleName) {
                     public void actionPerformed(@NotNull AnActionEvent e) {
                         PMDInvoker.getInstance().runPMD(e, ruleFileName);
-                        getComponent().setLastRunActionAndRules(e, ruleFileName, false);
+                        componentOf(e).setLastRunActionAndRules(e, ruleFileName, false);
                     }
                 };
                 this.add(ruleAction);
@@ -49,7 +47,7 @@ public abstract class PreDefinedAbstractClass extends DefaultActionGroup {
                         public void actionPerformed(@NotNull AnActionEvent e) {
                             String categoryAllRules = String.join(PMDInvoker.RULE_DELIMITER, rulesetFilenames);
                             PMDInvoker.getInstance().runPMD(e, categoryAllRules);
-                            getComponent().setLastRunActionAndRules(e, categoryAllRules, false);
+                            componentOf(e).setLastRunActionAndRules(e, categoryAllRules, false);
                         }
                     };
                     this.add(allAction, Constraints.FIRST);
@@ -68,11 +66,13 @@ public abstract class PreDefinedAbstractClass extends DefaultActionGroup {
         return resourceAsStream;
     }
 
-    public void setComponent(PMDProjectComponent component) {
-        this.component = component;
-    }
-
-    public PMDProjectComponent getComponent() {
-        return component;
+    /**
+     * These action groups are application-level singletons; resolve the project-scoped
+     * component from the event instead of caching it (a cached reference outlives the
+     * project and leaks it).
+     */
+    private static PMDProjectComponent componentOf(AnActionEvent e) {
+        return Objects.requireNonNull(e.getProject(), "action requires a project")
+                .getService(PMDProjectComponent.class);
     }
 }

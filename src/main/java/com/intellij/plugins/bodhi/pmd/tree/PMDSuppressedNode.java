@@ -3,13 +3,13 @@ package com.intellij.plugins.bodhi.pmd.tree;
 import com.intellij.plugins.bodhi.pmd.core.HasMessage;
 import com.intellij.plugins.bodhi.pmd.core.HasRule;
 import com.intellij.plugins.bodhi.pmd.core.PMDSuppressedViolation;
-import net.sourceforge.pmd.lang.rule.Rule;
+import com.intellij.plugins.bodhi.pmd.core.RuleInfo;
 
 import static com.intellij.ui.SimpleTextAttributes.GRAYED_ATTRIBUTES;
 
 /**
- * Tree leaf node that has a PMD Suppressed Violation. It is
- * Navigatable, so that the user can navigate to the source of the suppressed violation.
+ * Tree leaf node wrapping a {@link PMDSuppressedViolation}. Navigatable so the user
+ * can jump to the source of the suppressed violation.
  *
  * @author jborgers
  */
@@ -49,12 +49,11 @@ public class PMDSuppressedNode extends PMDLeafNode implements HasMessage, HasRul
             // NOPMD should be followed by a reason explaining the suppression
             if (containsNoReasonDescription(userMessage)) {
                 result = "Warn: No reason for suppression documented";
-            }
-            else {
+            } else {
                 result = "Reason: " + userMessage;
             }
         }
-        // else:  Annotation cannot include a reason, should be documented in // comment
+        // else: annotation cannot include a reason, should be documented in // comment
         return result;
     }
 
@@ -65,15 +64,16 @@ public class PMDSuppressedNode extends PMDLeafNode implements HasMessage, HasRul
     }
 
     public String getMessage() {
-        return "A violation is actually suppressed by " +
-                (pmdSuppressedViolation.suppressedByNOPMD() ? "//NOPMD. " : "@SuppressWarnings. ")
+        return "A violation is actually suppressed by "
+                + (pmdSuppressedViolation.suppressedByNOPMD() ? "//NOPMD. " : "@SuppressWarnings. ")
                 + getReasonText() + "\n\nThe suppressed violation: "
-                + pmdSuppressedViolation.getPMDViolation().getRuleName() + " - " + pmdSuppressedViolation.getPMDViolation().getDescription();
+                + pmdSuppressedViolation.getPMDViolation().getRuleName()
+                + " - " + pmdSuppressedViolation.getPMDViolation().getDescription();
     }
 
     @Override
-    public Rule getRule() {
-        return pmdSuppressedViolation.getPMDViolation().getRule();
+    public RuleInfo getRuleInfo() {
+        return pmdSuppressedViolation.getPMDViolation().getRuleInfo();
     }
 
     @Override
@@ -83,12 +83,11 @@ public class PMDSuppressedNode extends PMDLeafNode implements HasMessage, HasRul
             // NOPMD should be followed by a reason explaining the suppression
             if (containsNoReasonDescription(userMessage)) {
                 cellRenderer.setIcon(Severity.MEDIUM.getIcon());
-            }
-            else {
+            } else {
                 cellRenderer.setIcon(Severity.INFO.getIcon());
             }
-        }
-        else { // suppressed by Annotation has no option to describe the reason, should be documented in // comment
+        } else {
+            // suppressed by Annotation has no option to describe the reason, should be documented in // comment
             cellRenderer.setIcon(Severity.INFO.getIcon());
         }
         cellRenderer.append("suppressed: ", GRAYED_ATTRIBUTES);
@@ -103,4 +102,3 @@ public class PMDSuppressedNode extends PMDLeafNode implements HasMessage, HasRul
         return 1;
     }
 }
-

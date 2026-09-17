@@ -2,7 +2,6 @@ package com.intellij.plugins.bodhi.pmd.tree;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.ColoredTreeCellRenderer;
-import net.sourceforge.pmd.lang.rule.RulePriority;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -39,7 +38,7 @@ public class PMDCellRenderer extends ColoredTreeCellRenderer {
         }
     }
 
-    public void setIconForRulePriority(RulePriority priority) {
+    public void setIconForRulePriority(int priority) {
         setIcon(Severity.iconOf(priority));
     }
 }
